@@ -33,9 +33,12 @@ Scripts are written by n8n (remote) BEFORE the job reaches this worker.
 - KAPE engine:  vendor\kape-explainer\skills\spatial-film
 - Voicebox API description: docs\voicebox-openapi.json
 
+## Shell
+OpenCode runs commands in Git Bash on Windows. Always use forward slashes in paths, for example C:/shorts/venv/Scripts/python. Backslash paths fail in Git Bash.
+
 ## Tests
-- Fast: C:\shorts\venv\Scripts\python -m pytest -q -m "not slow"   (no Voicebox, no render, < 30 s)
-- Slow: C:\shorts\venv\Scripts\python -m pytest -q -m slow          (the human runs these)
+- Fast: C:/shorts/venv/Scripts/python -m pytest -q -m "not slow"   (no Voicebox, no render, < 30 s)
+- Slow: C:/shorts/venv/Scripts/python -m pytest -q -m slow          (the human runs these)
 - Every new function gets a fast test. Fixtures live in tests/fixtures/.
 
 ## Planned layout
