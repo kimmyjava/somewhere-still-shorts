@@ -3,4 +3,5 @@ pillow
 scipy
 faster-whisper
 av==18.1.0
+httpx
 pytest
