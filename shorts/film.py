@@ -58,7 +58,7 @@ def headline_scene_html(scene_id: str, dur: float, headline: str, kicker: str = 
 #root {{ position: absolute; inset: 0; width: 1080px; height: 1920px; overflow: hidden;
   background: #F6F2EA; font-family: 'Poppins', sans-serif; }}
 #{scene_id}-k {{ position: absolute; left: 0; right: 0; top: 230px; text-align: center; opacity: 0;
-  font: 500 40px/1.2 'Poppins', sans-serif; color: #C9824B; }}
+  font: 500 40px/1.2 'Poppins', sans-serif; color: #7A4A1E; }}
 #{scene_id}-h {{ position: absolute; left: 120px; right: 120px; top: 300px; text-align: center; opacity: 0;
   font: 700 88px/1.1 'Poppins', sans-serif; color: #2B2A28; }}
 </style>

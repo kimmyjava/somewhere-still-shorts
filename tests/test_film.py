@@ -1,4 +1,6 @@
 """Fast film-plan tests: scene times, film.json updates, poses, placeholder HTML."""
+import re
+
 import pytest
 from pathlib import Path
 
@@ -87,7 +89,7 @@ def test_headline_scene_html_contents():
     assert 'data-composition-id="s01-places"' in html
     assert "{{" not in html
     assert "var(--" not in html
-    assert "#2B2A28" in html and "#C9824B" in html and "#F6F2EA" in html
+    assert "#2B2A28" in html and "#7A4A1E" in html and "#F6F2EA" in html
     assert "window.__timelines['s01-places']" in html
 
 
@@ -95,3 +97,28 @@ def test_headline_scene_html_fades_out_before_end():
     html = headline_scene_html("s02-memories", 5.5, "Small memories")
     assert "tl.to(['#s02-memories-k', '#s02-memories-h']" in html
     assert ", 5.05);" in html
+
+
+def _srgb_channel(c):
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _luminance(hex_color):
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return 0.2126 * _srgb_channel(r) + 0.7152 * _srgb_channel(g) + 0.0722 * _srgb_channel(b)
+
+
+def _contrast(a, b):
+    lo, hi = sorted((_luminance(a), _luminance(b)))
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_headline_scene_contrast_meets_wcag():
+    html = headline_scene_html("s01-places", 4.95, "Places stay with us")
+    bg = "#F6F2EA"
+    kicker = re.search(r"#s01-places-k \{[^}]*?color: (#[0-9A-Fa-f]{6})", html).group(1)
+    headline = re.search(r"#s01-places-h \{[^}]*?color: (#[0-9A-Fa-f]{6})", html).group(1)
+    assert _contrast(kicker, bg) >= 4.5
+    assert _contrast(headline, bg) >= 4.5
+    assert _contrast("#7A4A1E", bg) == pytest.approx(6.66, abs=0.01)
+    assert _contrast("#2B2A28", bg) == pytest.approx(12.84, abs=0.05)
