@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+.env
+jobs/
+renders/
+.media/
+.hyperframes/
+snapshots/
+*.wav
+*.mp3
+*.mp4
+!tests/fixtures/*.wav
