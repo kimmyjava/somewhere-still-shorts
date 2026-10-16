@@ -26,6 +26,7 @@ Scripts are written by n8n (remote) BEFORE the job reaches this worker.
 - No secrets in code, logs or tests. Read them from environment variables.
 - Voicebox stays on 127.0.0.1:17493. Never add code that exposes it.
 - Pinned versions: hyperframes 0.8.117 (never upgrade), gsap 3.14.2, av==18.1.0.
+- Never create or edit files outside this repository. Tools may write job output only into the --jobs-root folder.
 
 ## Paths on this laptop
 - Python: C:\shorts\venv\Scripts\python.exe (use it for everything)
