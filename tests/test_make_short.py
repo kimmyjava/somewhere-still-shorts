@@ -73,6 +73,9 @@ def env(tmp_path, monkeypatch):
                             "ink": "#2B2A28"}), encoding="utf-8")
             return "scaffolded\n"
         if cmd[0] == "ffmpeg":
+            if "-filter_complex" in cmd:
+                Path(cmd[-1]).write_bytes(b"MP4")
+                return "mixed\n"
             master = Path(cwd) / "assets" / "audio" / "vo-master.wav"
             master.parent.mkdir(parents=True, exist_ok=True)
             master.write_bytes(b"fake")
@@ -94,11 +97,17 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(make_short, "VoiceboxTTS", FakeTTS)
     monkeypatch.setattr(make_short, "transcribe", fake_transcribe)
     monkeypatch.setattr(make_short, "run", fake_run)
-    return {"calls": calls, "jobs": tmp_path / "jobs"}
+    monkeypatch.setattr(make_short, "_find_tool", lambda name: name)
+    music_dir = tmp_path / "music"
+    music_dir.mkdir()
+    for n in ("calm-01.mp3", "calm-02.mp3", "cozy-01.mp3"):
+        (music_dir / n).write_bytes(b"")
+    return {"calls": calls, "jobs": tmp_path / "jobs", "music": music_dir}
 
 
 def run_main(env, *extra):
-    return Path(make_short.main(["--brief", str(BRIEF), "--jobs-root", str(env["jobs"]), *extra]))
+    return Path(make_short.main(["--brief", str(BRIEF), "--jobs-root", str(env["jobs"]),
+                                 "--music-dir", str(env["music"]), *extra]))
 
 
 def test_make_short_flow_writes_files_in_order(env):
@@ -168,17 +177,36 @@ def test_presenter_track_mirror_is_empty(env):
     assert track["mirror"] == []
 
 
-def test_make_short_render_copies_result(env):
+def test_make_short_render_mixes_music(env):
     job = run_main(env)
 
+    assert (job / "kitchen-table-nomusic.mp4").is_file()
     assert (job / "kitchen-table.mp4").is_file()
+    assert (job / "music.txt").read_text(encoding="utf-8").startswith("calm-")
+
+    kinds = [c[0] for c in env["calls"]]
+    assert kinds[-3:] == ["npx", "ffprobe", "ffmpeg"]
+    assert "check" in env["calls"][-4]
+    render_call = env["calls"][-3]
+    assert "render" in render_call
+    assert render_call[render_call.index("-o") + 1] == "renders/kitchen-table.mp4"
+    assert "--fps" in render_call and "30" in render_call
+    assert "--quality" in render_call and "draft" in render_call
+    mix_call = env["calls"][-1]
+    assert any("sidechaincompress" in c for c in mix_call)
+    assert any("loudnorm=I=-30" in c for c in mix_call)
+
+
+def test_make_short_no_music_copies_video(env):
+    job = run_main(env, "--no-music")
+
+    assert (job / "kitchen-table-nomusic.mp4").is_file()
+    assert (job / "kitchen-table.mp4").is_file()
+    assert not (job / "music.txt").exists()
     kinds = [c[0] for c in env["calls"]]
     assert kinds[-2:] == ["npx", "npx"]
-    assert "check" in env["calls"][-2]
-    assert "render" in env["calls"][-1]
-    assert env["calls"][-1][env["calls"][-1].index("-o") + 1] == "renders/kitchen-table.mp4"
-    assert "--fps" in env["calls"][-1] and "30" in env["calls"][-1]
-    assert "--quality" in env["calls"][-1] and "draft" in env["calls"][-1]
+    assert kinds.count("ffprobe") == 1
+    assert not any("filter_complex" in c for c in env["calls"])
 
 
 def test_existing_voice_is_reused_and_redo_voice_regenerates(env):
