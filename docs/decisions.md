@@ -37,5 +37,12 @@
   slug hash (shorts/music.py, own ffmpeg mix - vendor master-audio.py is NOT used), normalises the
   track to -30 LUFS, sidechain-ducks it under the voice, final mix -14 LUFS.
 
+## Gateway
+- Local job gateway: FastAPI, bound to 127.0.0.1:8787 ONLY (tools/gateway.py); n8n reaches it
+  through a Cloudflare Tunnel, never an open port.
+- Auth: X-API-Key header compared against the SHORTS_API_KEY env var (>= 32 chars, never logged
+  or returned). One worker thread, one job at a time; status in <job>/status.json.
+- Voicebox stays on 127.0.0.1:17493 and is never exposed; /health only reports its up/down.
+
 ## Not decided yet
 - Final colours and fonts. Scene template list for the cozy style.
