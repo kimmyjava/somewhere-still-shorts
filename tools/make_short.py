@@ -6,6 +6,7 @@ Per-step logs: <jobs-root>/<slug>/logs/<step>.log. Final video: <jobs-root>/<slu
 """
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -17,8 +18,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from shorts.brief import full_narration, load_brief
-from shorts.captions import caption_composition, make_chunks, write_srt
-from shorts.film import film_updates, headline_scene_html, presenter_poses, scene_times
+from shorts.captions import make_chunks, write_srt
+from shorts.film import film_updates, presenter_poses, scene_times
+from shorts.look import PALETTE, cozy_captions_html, cozy_scene_html
 from shorts.runner import StepError, run
 from shorts.timing import align, load_whisper_words, transcribe
 from shorts.tts.base import VoiceSpec
@@ -111,29 +113,47 @@ def main(argv=None):
              "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000", "-ar", "48000",
              "assets/audio/vo-master.wav"],
             cwd=film, log_path=logs / "f-vo-master.log", timeout_s=900)
+        bg_dir = film / "assets" / "bg"
+        bg_dir.mkdir(parents=True, exist_ok=True)
+        for name in sorted({s.bg for s in brief.scenes}):
+            shutil.copy2(REPO / "assets" / "bg" / f"{name}.jpg", bg_dir / f"{name}.jpg")
+        fonts_dir = film / "assets" / "fonts"
+        fonts_dir.mkdir(parents=True, exist_ok=True)
+        for font in ("fraunces-600.woff2", "nunito-800.woff2"):
+            shutil.copy2(REPO / "assets" / "fonts" / font, fonts_dir / font)
         film_json = film / "film.json"
         data = json.loads(film_json.read_text(encoding="utf-8"))
         data.update(film_updates(times, voice_dur))
+        data["ground"] = PALETTE["night"]
         data.pop("bgm", None)
         film_json.write_text(json.dumps(data, indent=1), encoding="utf-8")
         track_path = film / "src" / "presenter-track.json"
         track = json.loads(track_path.read_text(encoding="utf-8"))
+        track["scale"] = 0.75
         track["poses"] = presenter_poses(times, brief)
         track["fx"] = []
         track["mirror"] = []
         track_path.write_text(json.dumps(track, indent=1), encoding="utf-8")
-        brand = json.loads((film / "brand.json").read_text(encoding="utf-8"))
-        accent = brand.get("accent", "#C9824B")
+        brand_path = film / "brand.json"
+        brand = json.loads(brand_path.read_text(encoding="utf-8"))
+        brand["accent"] = PALETTE["accent"]
+        brand["accent_dark"] = "#6E3218"
+        brand_path.write_text(json.dumps(brand, indent=1), encoding="utf-8")
+        kit = film / "assets" / "kit.css"
+        css = kit.read_text(encoding="utf-8")
+        css = re.sub(r"--brand-accent:\s*[^;]+;", f"--brand-accent: {PALETTE['accent']};", css)
+        css = re.sub(r"--brand-accent-dark:\s*[^;]+;", "--brand-accent-dark: #6E3218;", css)
+        kit.write_text(css, encoding="utf-8")
         comp = film / "compositions"
         comp.mkdir(exist_ok=True)
         for scene in brief.scenes:
             dur = next(d for sid, _s, d in times if sid == scene.id)
             (comp / f"{scene.id}.html").write_text(
-                headline_scene_html(scene.id, dur, scene.headline), encoding="utf-8")
+                cozy_scene_html(scene.id, dur, scene.headline, scene.bg), encoding="utf-8")
         total = sum(d for _sid, _s, d in times)
         (comp / "m-captions.html").write_text(
-            caption_composition(chunks, total, accent=accent), encoding="utf-8")
-        return f"scenes={len(brief.scenes)} chunks={len(chunks)} voice={voice_dur:.2f}s total={total:.2f}s accent={accent}"
+            cozy_captions_html(chunks, total), encoding="utf-8")
+        return f"scenes={len(brief.scenes)} chunks={len(chunks)} voice={voice_dur:.2f}s total={total:.2f}s accent={PALETTE['accent']}"
 
     _log_step(logs, "f-fill-film", _timed("f-fill-film", fill))
 

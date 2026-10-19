@@ -1,6 +1,4 @@
-"""Film plan: brief + timed words -> scene times, film.json updates, poses, placeholder scene HTML."""
-from html import escape
-
+"""Film plan: brief + timed words -> scene times, film.json updates, presenter poses."""
 from shorts.brief import Brief
 
 
@@ -44,38 +42,12 @@ def film_updates(scene_times: list[tuple[str, float, float]], voice_dur: float) 
 
 
 def presenter_poses(scene_times: list[tuple[str, float, float]], brief: Brief) -> list[list]:
-    poses = [[0.0, "wave"]]
-    for (sid, start, _dur), scene in zip(scene_times, brief.scenes):
-        poses.append([max(0.0, round(start - 0.1, 2)), scene.pose])
+    poses: list[list] = []
+    last = -1.0
+    for (_sid, start, _dur), scene in zip(scene_times, brief.scenes):
+        t = max(0.0, round(start - 0.1, 2))
+        if poses and t <= last:
+            t = round(last + 0.01, 2)
+        poses.append([t, scene.pose])
+        last = t
     return poses
-
-
-def headline_scene_html(scene_id: str, dur: float, headline: str, kicker: str = "Somewhere Still") -> str:
-    d = round(float(dur), 3)
-    out_at = round(max(0.0, d - 0.45), 3)
-    return f"""<template>
-<style>
-#root {{ position: absolute; inset: 0; width: 1080px; height: 1920px; overflow: hidden;
-  background: #F6F2EA; font-family: 'Poppins', sans-serif; }}
-#{scene_id}-k {{ position: absolute; left: 0; right: 0; top: 230px; text-align: center; opacity: 0;
-  font: 500 40px/1.2 'Poppins', sans-serif; color: #7A4A1E; }}
-#{scene_id}-h {{ position: absolute; left: 120px; right: 120px; top: 300px; text-align: center; opacity: 0;
-  font: 700 88px/1.1 'Poppins', sans-serif; color: #2B2A28; }}
-</style>
-<div id="root" data-composition-id="{scene_id}" data-width="1080" data-height="1920">
-  <div id="{scene_id}-clip" class="clip" data-start="0" data-duration="{d}" data-track-index="1">
-    <div id="{scene_id}-k">{escape(kicker)}</div>
-    <div id="{scene_id}-h">{escape(headline)}</div>
-  </div>
-</div>
-<script>
-(function () {{
-  var tl = gsap.timeline({{ paused: true }});
-  tl.fromTo('#{scene_id}-k', {{opacity: 0, y: 30}}, {{opacity: 1, y: 0, duration: 0.5, ease: 'expo.out'}}, 0.2);
-  tl.fromTo('#{scene_id}-h', {{opacity: 0, y: 40}}, {{opacity: 1, y: 0, duration: 0.6, ease: 'expo.out'}}, 0.6);
-  tl.to(['#{scene_id}-k', '#{scene_id}-h'], {{opacity: 0, duration: 0.35, ease: 'power2.in'}}, {out_at});
-  window.__timelines = window.__timelines || {{}}; window.__timelines['{scene_id}'] = tl;
-}})();
-</script>
-</template>
-"""

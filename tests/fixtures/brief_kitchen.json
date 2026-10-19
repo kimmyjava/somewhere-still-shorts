@@ -1,25 +1,28 @@
 {
-  "slug": "kitchen-table",
-  "title": "Places that stay with us",
-  "cta": "Follow for more",
-  "scenes": [
-    {
-      "id": "s01-places",
-      "narration": "Some places stay with us long after we leave them.",
-      "headline": "Places stay with us",
-      "pose": "wave"
-    },
-    {
-      "id": "s02-memories",
-      "narration": "A kitchen table, a quiet street, the smell of old books.",
-      "headline": "Small memories",
-      "pose": "present"
-    },
-    {
-      "id": "s03-back",
-      "narration": "Today, let's go back for a moment.",
-      "headline": "Let's go back",
-      "pose": "point"
-    }
-  ]
+ "slug": "kitchen-table",
+ "title": "Places that stay with us",
+ "cta": "Follow for more",
+ "scenes": [
+  {
+   "id": "s01-places",
+   "narration": "Some places stay with us long after we leave them.",
+   "headline": "Places stay with us",
+   "pose": "wave",
+   "bg": "bg-street"
+  },
+  {
+   "id": "s02-memories",
+   "narration": "A kitchen table, a quiet street, the smell of old books.",
+   "headline": "Small memories",
+   "pose": "present",
+   "bg": "bg-kitchen"
+  },
+  {
+   "id": "s03-back",
+   "narration": "Today, let's go back for a moment.",
+   "headline": "Let's go back",
+   "pose": "point",
+   "bg": "bg-books"
+  }
+ ]
 }

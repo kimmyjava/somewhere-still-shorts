@@ -55,6 +55,9 @@ def env(tmp_path, monkeypatch):
             (film / "assets" / "audio").mkdir(parents=True, exist_ok=True)
             (film / "src").mkdir(parents=True, exist_ok=True)
             (film / "assets" / "audio" / "vo.mp3").write_bytes(b"fake")
+            (film / "assets" / "kit.css").write_text(
+                ":root { --brand-ink: #3B2416; --brand-accent: #C9824B; --brand-accent-dark: #A0522D; }\n",
+                encoding="utf-8")
             (film / "film.json").write_text(json.dumps({
                 "name": "x",
                 "scenes": [["s01-hook", 7.3]],
@@ -66,7 +69,8 @@ def env(tmp_path, monkeypatch):
             (film / "src" / "presenter-track.json").write_text(
                 json.dumps({"poses": [], "fx": [{"sprite": "q"}]}), encoding="utf-8")
             (film / "brand.json").write_text(
-                json.dumps({"name": "Somewhere Still", "accent": "#123456", "ink": "#2B2A28"}), encoding="utf-8")
+                json.dumps({"name": "Somewhere Still", "accent": "#123456", "accent_dark": "#A0522D",
+                            "ink": "#2B2A28"}), encoding="utf-8")
             return "scaffolded\n"
         if cmd[0] == "ffmpeg":
             master = Path(cwd) / "assets" / "audio" / "vo-master.wav"
@@ -114,18 +118,35 @@ def test_make_short_flow_writes_files_in_order(env):
     assert [o["id"] for o in data["overlays"]] == ["m-kape", "m-brand", "m-captions"]
     assert "bgm" not in data
 
+    assert data["ground"] == "#1E1A2B"
+
     track = json.loads((film / "src" / "presenter-track.json").read_text(encoding="utf-8"))
-    assert track["poses"] == [[0.0, "wave"], [0.0, "wave"], [4.85, "present"], [10.35, "point"]]
+    assert track["poses"] == [[0.0, "wave"], [4.85, "present"], [10.35, "point"]]
     assert track["fx"] == []
+    assert track["mirror"] == []
+    assert track["scale"] == 0.75
 
     html1 = (film / "compositions" / "s01-places.html").read_text(encoding="utf-8")
     assert "Places stay with us" in html1
+    assert "assets/bg/bg-street.jpg" in html1
     assert 'data-composition-id="s01-places"' in html1
     html3 = (film / "compositions" / "s03-back.html").read_text(encoding="utf-8")
     assert "Let&#x27;s go back" in html3
+    assert "assets/bg/bg-books.jpg" in html3
     caps = (film / "compositions" / "m-captions.html").read_text(encoding="utf-8")
-    assert "#123456" in caps
+    assert "#9E4A24" in caps
     assert "kitchen" in caps
+
+    for name in ("bg-street", "bg-kitchen", "bg-books"):
+        assert (film / "assets" / "bg" / f"{name}.jpg").is_file(), name
+    for font in ("fraunces-600.woff2", "nunito-800.woff2"):
+        assert (film / "assets" / "fonts" / font).is_file(), font
+    brand = json.loads((film / "brand.json").read_text(encoding="utf-8"))
+    assert brand["accent"] == "#9E4A24"
+    assert brand["accent_dark"] == "#6E3218"
+    css = (film / "assets" / "kit.css").read_text(encoding="utf-8")
+    assert "--brand-accent: #9E4A24;" in css
+    assert "--brand-accent-dark: #6E3218;" in css
 
     for name in ("a-brief", "b-voice", "c-timing", "d-scene-times", "e-scaffold",
                  "f-fill-film", "g-build-presenter", "g-build-brand", "g-assemble", "h-check"):
