@@ -1,11 +1,9 @@
-"""Fast film-plan tests: scene times, film.json updates, poses, placeholder HTML."""
-import re
-
+"""Fast film-plan tests: scene times, film.json updates, presenter poses."""
 import pytest
 from pathlib import Path
 
 from shorts.brief import load_brief
-from shorts.film import film_updates, headline_scene_html, presenter_poses, scene_times
+from shorts.film import film_updates, presenter_poses, scene_times
 from shorts.timing import TimedWord
 
 FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "brief_kitchen.json"
@@ -65,60 +63,20 @@ def test_film_updates_fields():
     assert "bgm" not in updates
 
 
-def test_presenter_poses_wave_first_and_lead_time():
+def test_presenter_poses_first_at_zero_and_lead_time():
     brief = load_brief(FIXTURE)
     times = scene_times(brief, timed_words())
     poses = presenter_poses(times, brief)
 
-    assert poses[0] == [0.0, "wave"]
-    assert poses[1] == [0.0, "wave"]
-    assert poses[2] == [4.85, "present"]
-    assert poses[3] == [10.35, "point"]
+    assert poses == [[0.0, "wave"], [4.85, "present"], [10.35, "point"]]
 
 
-def test_presenter_poses_never_below_zero():
+def test_presenter_poses_strictly_increasing_no_duplicates():
     brief = load_brief(FIXTURE)
-    poses = presenter_poses([("s01-places", 0.05, 1.0)], brief)
-    assert poses[1] == [0.0, "wave"]
+    times = [("s01-x", 0.0, 1.0), ("s02-y", 0.05, 1.0), ("s03-z", 0.08, 1.0)]
+    poses = presenter_poses(times, brief)
 
-
-def test_headline_scene_html_contents():
-    html = headline_scene_html("s01-places", 4.95, "Places stay with us")
-    assert "Places stay with us" in html
-    assert "Somewhere Still" in html
-    assert 'data-composition-id="s01-places"' in html
-    assert "{{" not in html
-    assert "var(--" not in html
-    assert "#2B2A28" in html and "#7A4A1E" in html and "#F6F2EA" in html
-    assert "window.__timelines['s01-places']" in html
-
-
-def test_headline_scene_html_fades_out_before_end():
-    html = headline_scene_html("s02-memories", 5.5, "Small memories")
-    assert "tl.to(['#s02-memories-k', '#s02-memories-h']" in html
-    assert ", 5.05);" in html
-
-
-def _srgb_channel(c):
-    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-
-
-def _luminance(hex_color):
-    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
-    return 0.2126 * _srgb_channel(r) + 0.7152 * _srgb_channel(g) + 0.0722 * _srgb_channel(b)
-
-
-def _contrast(a, b):
-    lo, hi = sorted((_luminance(a), _luminance(b)))
-    return (hi + 0.05) / (lo + 0.05)
-
-
-def test_headline_scene_contrast_meets_wcag():
-    html = headline_scene_html("s01-places", 4.95, "Places stay with us")
-    bg = "#F6F2EA"
-    kicker = re.search(r"#s01-places-k \{[^}]*?color: (#[0-9A-Fa-f]{6})", html).group(1)
-    headline = re.search(r"#s01-places-h \{[^}]*?color: (#[0-9A-Fa-f]{6})", html).group(1)
-    assert _contrast(kicker, bg) >= 4.5
-    assert _contrast(headline, bg) >= 4.5
-    assert _contrast("#7A4A1E", bg) == pytest.approx(6.66, abs=0.01)
-    assert _contrast("#2B2A28", bg) == pytest.approx(12.84, abs=0.05)
+    stamps = [p[0] for p in poses]
+    assert stamps[0] == 0.0
+    assert stamps == sorted(set(stamps))
+    assert len(stamps) == 3

@@ -21,8 +21,8 @@ def good_brief():
         "slug": "kitchen-table",
         "title": "Places that stay with us",
         "scenes": [
-            {"id": "s01-places", "narration": "one two three", "headline": "H1"},
-            {"id": "s02-memories", "narration": "four five six", "headline": "H2"},
+            {"id": "s01-places", "narration": "one two three", "headline": "H1", "bg": "bg-kitchen"},
+            {"id": "s02-memories", "narration": "four five six", "headline": "H2", "bg": "bg-street"},
         ],
     }
 
@@ -34,8 +34,23 @@ def test_fixture_loads():
     assert brief.cta == "Follow for more"
     assert [s.id for s in brief.scenes] == ["s01-places", "s02-memories", "s03-back"]
     assert [s.pose for s in brief.scenes] == ["wave", "present", "point"]
+    assert [s.bg for s in brief.scenes] == ["bg-street", "bg-kitchen", "bg-books"]
     assert brief.scenes[1].headline == "Small memories"
     assert brief.scenes[0].narration.startswith("Some places stay with us")
+
+
+def test_bg_required(tmp_path):
+    d = good_brief()
+    del d["scenes"][0]["bg"]
+    with pytest.raises(BriefError, match="bg is missing"):
+        load_brief(write_brief(tmp_path, d))
+
+
+def test_missing_bg_image_rejected(tmp_path):
+    d = good_brief()
+    d["scenes"][0]["bg"] = "bg-nope"
+    with pytest.raises(BriefError, match="bg-nope.jpg does not exist"):
+        load_brief(write_brief(tmp_path, d))
 
 
 def test_full_narration_joins_with_one_space():

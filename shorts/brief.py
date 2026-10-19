@@ -9,6 +9,7 @@ SCENE_ID_RE = re.compile(r"^s\d{2}-[a-z0-9-]+$")
 POSES = ("idle", "wave", "point", "present", "think", "thumbs-up", "celebrate", "sit", "walk")
 MAX_HEADLINE = 40
 MAX_SCENES = 20
+REPO = Path(__file__).resolve().parents[1]
 
 
 class BriefError(Exception):
@@ -20,6 +21,7 @@ class Scene:
     id: str
     narration: str
     headline: str
+    bg: str
     pose: str = "idle"
 
 
@@ -62,10 +64,15 @@ def load_brief(path: Path) -> Brief:
         headline = str(raw.get("headline", ""))
         if len(headline) > MAX_HEADLINE:
             raise BriefError(f"scene {sid}: headline is {len(headline)} characters (max {MAX_HEADLINE})")
+        bg = str(raw.get("bg", ""))
+        if not bg:
+            raise BriefError(f"scene {sid}: bg is missing")
+        if not (REPO / "assets" / "bg" / f"{bg}.jpg").is_file():
+            raise BriefError(f"scene {sid}: assets/bg/{bg}.jpg does not exist")
         pose = str(raw.get("pose", "idle"))
         if pose not in POSES:
             raise BriefError(f"scene {sid}: pose {pose!r} is not one of {', '.join(POSES)}")
-        scenes.append(Scene(id=sid, narration=narration, headline=headline, pose=pose))
+        scenes.append(Scene(id=sid, narration=narration, headline=headline, bg=bg, pose=pose))
 
     return Brief(slug=slug, title=str(data.get("title", "")), scenes=scenes, cta=str(data.get("cta", "Follow for more")))
 
