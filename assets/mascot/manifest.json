@@ -1,0 +1,72 @@
+{
+ "poses/celebrate": {
+  "w": 603,
+  "h": 1098,
+  "sheet_box": null
+ },
+ "poses/idle": {
+  "w": 387,
+  "h": 1100,
+  "sheet_box": null
+ },
+ "poses/point": {
+  "w": 535,
+  "h": 1100,
+  "sheet_box": null
+ },
+ "poses/present": {
+  "w": 551,
+  "h": 1099,
+  "sheet_box": null
+ },
+ "poses/rest": {
+  "w": 649,
+  "h": 1033,
+  "sheet_box": null
+ },
+ "poses/sit": {
+  "w": 644,
+  "h": 1024,
+  "sheet_box": null
+ },
+ "poses/think": {
+  "w": 374,
+  "h": 1100,
+  "sheet_box": null
+ },
+ "poses/thumbs-up": {
+  "w": 461,
+  "h": 1100,
+  "sheet_box": null
+ },
+ "poses/wave": {
+  "w": 476,
+  "h": 1099,
+  "sheet_box": null
+ },
+ "fx/coffee-ring": {
+  "w": 451,
+  "h": 377,
+  "sheet_box": null
+ },
+ "fx/confetti": {
+  "w": 554,
+  "h": 377,
+  "sheet_box": null
+ },
+ "fx/question": {
+  "w": 411,
+  "h": 378,
+  "sheet_box": null
+ },
+ "fx/sparkle-burst": {
+  "w": 467,
+  "h": 397,
+  "sheet_box": null
+ },
+ "fx/steam": {
+  "w": 283,
+  "h": 392,
+  "sheet_box": null
+ }
+}

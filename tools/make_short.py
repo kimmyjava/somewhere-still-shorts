@@ -120,6 +120,7 @@ def main(argv=None):
         track = json.loads(track_path.read_text(encoding="utf-8"))
         track["poses"] = presenter_poses(times, brief)
         track["fx"] = []
+        track["mirror"] = []
         track_path.write_text(json.dumps(track, indent=1), encoding="utf-8")
         brand = json.loads((film / "brand.json").read_text(encoding="utf-8"))
         accent = brand.get("accent", "#C9824B")

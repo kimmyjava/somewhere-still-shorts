@@ -141,6 +141,12 @@ def test_make_short_flow_writes_files_in_order(env):
     assert not any("render" in c for c in env["calls"][-1])
 
 
+def test_presenter_track_mirror_is_empty(env):
+    job = run_main(env, "--no-render")
+    track = json.loads((job / "film" / "src" / "presenter-track.json").read_text(encoding="utf-8"))
+    assert track["mirror"] == []
+
+
 def test_make_short_render_copies_result(env):
     job = run_main(env)
 
