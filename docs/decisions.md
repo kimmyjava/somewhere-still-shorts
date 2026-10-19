@@ -3,9 +3,7 @@
 ## Content
 - Channel: Somewhere Still. Mood: cozy, nostalgic, calm, gentle motion, soft fades.
 - Length: 60 seconds to 3 minutes, vertical 1080x1920.
-- Mascot: our OWN character (a woman with curly hair and glasses), made once as
-  transparent pose PNGs, prepared with KAPE's prep-mascot.py. KAPE's demo mascot is
-  only for tests (licence: not allowed as our brand character).
+- Mascot: our own curly-haired girl with round glasses, cream cable-knit sweater, brown plaid pants, bear slippers. Prepared files in assets/mascot (copy installed in ~/.kape-explainer/profile/mascot). Poses: idle, point, wave, present, think, thumbs-up, celebrate, sit, rest. Expressions (not used yet) in assets/mascot/expressions. Point is not mirrored. Blinks off for now.
 - Captions: on, word-timed, script spelling (not Whisper spelling).
 
 ## Voice (tested 2026-10-16)

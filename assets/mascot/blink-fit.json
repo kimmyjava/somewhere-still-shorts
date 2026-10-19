@@ -1,0 +1,65 @@
+{
+ "celebrate": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "idle": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "point": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "present": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "rest": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "sit": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "think": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "thumbs-up": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ },
+ "wave": {
+  "score": 0,
+  "scale": 1,
+  "x": 0,
+  "y": 0,
+  "blink": false
+ }
+}
