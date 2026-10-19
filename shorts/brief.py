@@ -31,6 +31,7 @@ class Brief:
     title: str
     scenes: list[Scene]
     cta: str = "Follow for more"
+    music: str = "calm"
 
 
 def load_brief(path: Path) -> Brief:
@@ -74,7 +75,8 @@ def load_brief(path: Path) -> Brief:
             raise BriefError(f"scene {sid}: pose {pose!r} is not one of {', '.join(POSES)}")
         scenes.append(Scene(id=sid, narration=narration, headline=headline, bg=bg, pose=pose))
 
-    return Brief(slug=slug, title=str(data.get("title", "")), scenes=scenes, cta=str(data.get("cta", "Follow for more")))
+    return Brief(slug=slug, title=str(data.get("title", "")), scenes=scenes,
+                 cta=str(data.get("cta", "Follow for more")), music=str(data.get("music", "calm")))
 
 
 def full_narration(brief: Brief) -> str:

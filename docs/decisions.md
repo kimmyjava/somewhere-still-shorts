@@ -32,6 +32,10 @@
 ## Music
 - Library of 15-20 tracks downloaded once (YouTube Audio Library first), tagged by mood.
 - Worker picks by mood, cuts to length, ducks under the voice (KAPE bgm-cut.py / master-audio idea).
+- Note (2026-10-19): royalty-free tracks from Pixabay / YouTube Audio Library, no attribution
+  required. Files live in C:/shorts/music named <mood>-NN.mp3 (not in git). The worker picks by
+  slug hash (shorts/music.py, own ffmpeg mix - vendor master-audio.py is NOT used), normalises the
+  track to -30 LUFS, sidechain-ducks it under the voice, final mix -14 LUFS.
 
 ## Not decided yet
 - Final colours and fonts. Scene template list for the cozy style.

@@ -21,6 +21,7 @@ from shorts.brief import full_narration, load_brief
 from shorts.captions import make_chunks, write_srt
 from shorts.film import film_updates, presenter_poses, scene_times
 from shorts.look import PALETTE, cozy_captions_html, cozy_scene_html
+from shorts.music import mix_command, pick_track
 from shorts.runner import StepError, run
 from shorts.timing import align, load_whisper_words, transcribe
 from shorts.tts.base import VoiceSpec
@@ -33,6 +34,13 @@ ENGINE = REPO / "vendor" / "kape-explainer" / "skills" / "spatial-film"
 
 def _log_step(logs: Path, name: str, text: str) -> None:
     (logs / f"{name}.log").write_text(text, encoding="utf-8")
+
+
+def _find_tool(name: str) -> str:
+    found = shutil.which(name)
+    if not found:
+        raise StepError(f"{name} not found in PATH - install ffmpeg first (winget install Gyan.FFmpeg)")
+    return found
 
 
 def _timed(label: str, fn):
@@ -51,6 +59,8 @@ def main(argv=None):
     ap.add_argument("--quality", default="draft")
     ap.add_argument("--no-render", action="store_true", help="stop after the hyperframes check")
     ap.add_argument("--redo-voice", action="store_true", help="synthesize even if job/vo.wav exists")
+    ap.add_argument("--music-dir", default="C:/shorts/music", help="folder with <mood>-NN.mp3 tracks")
+    ap.add_argument("--no-music", action="store_true", help="skip the music mix")
     args = ap.parse_args(argv)
 
     brief = _timed("a-brief", lambda: load_brief(args.brief))
@@ -183,11 +193,39 @@ def main(argv=None):
         run(["npx", "--yes", "hyperframes@0.8.117", "render", "--fps", str(args.fps),
              "--quality", args.quality, "-o", f"renders/{brief.slug}.mp4"],
             cwd=film, log_path=logs / "i-render.log", timeout_s=3600)
+        no_music = job / f"{brief.slug}-nomusic.mp4"
+        shutil.move(str(film / "renders" / f"{brief.slug}.mp4"), str(no_music))
+        return no_music
+
+    no_music_video = _timed("i-render", render)
+
+    def music():
         final = job / f"{brief.slug}.mp4"
-        shutil.copy2(film / "renders" / f"{brief.slug}.mp4", final)
+        if args.no_music:
+            note = "--no-music given - using the video without music"
+            print(f"WARNING: {note}", flush=True)
+            _log_step(logs, "j-music", note)
+            shutil.copy2(no_music_video, final)
+            return final
+        track = pick_track(args.music_dir, brief.music, brief.slug)
+        if track is None:
+            note = f"no music in {args.music_dir} for mood {brief.music!r} (or calm) - using the video without music"
+            print(f"WARNING: {note}", flush=True)
+            _log_step(logs, "j-music", note)
+            shutil.copy2(no_music_video, final)
+            return final
+        probe = run([_find_tool("ffprobe"), "-v", "error", "-show_entries", "format=duration",
+                     "-of", "default=noprint_wrappers=1:nokey=1", str(no_music_video)],
+                    cwd=job, log_path=logs / "j-ffprobe.log")
+        duration = float(probe.strip().splitlines()[-1])
+        mix = mix_command(no_music_video, track, final, duration)
+        mix[0] = _find_tool("ffmpeg")
+        run(mix, cwd=job, log_path=logs / "j-mix.log", timeout_s=1800)
+        (job / "music.txt").write_text(track.name, encoding="utf-8")
+        _log_step(logs, "j-music", f"track={track.name} duration={duration:.2f}s")
         return final
 
-    final = _timed("i-render", render)
+    final = _timed("j-music", music)
     print(f"done: {final} (total {time.monotonic() - t_all:.1f}s)")
     return job
 
