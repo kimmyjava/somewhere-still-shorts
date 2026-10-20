@@ -11,7 +11,7 @@ import pytest
 
 from shorts import images as shorts_images
 from shorts.brief import full_narration, load_brief
-from shorts.images import bg_name
+from shorts.images import bg_name, pick_style_ref
 from shorts.runner import StepError
 from shorts.tts.base import TTSResult
 
@@ -284,15 +284,24 @@ def test_generated_backgrounds_flow_into_film(env_factory, monkeypatch, tmp_path
     job = run_main(env, "--no-render")
 
     assert len(http_calls) == 2
+    bodies = []
     for request in http_calls:
         assert request.headers["Authorization"] == "Bearer tok-secret-1"
-        assert b"name=\"input_image_0\"" in request.read()
+        body = request.read()
+        bodies.append(body)
+        assert b'name="input_image_0"' in body
+    assert b"style-ref.jpg" in bodies[0]
+    assert b"style-ref-kitchen.jpg" in bodies[1]
     data, by_id = _read_scene_records(job)
     assert data["model"] == shorts_images.MODEL
     gen1, gen2 = by_id["s01-rain"], by_id["s02-tea"]
     assert gen1["source"] == "generated" and gen1["bg"].startswith("gen-")
+    assert gen1["ref"] == "books"
     assert gen2["source"] == "generated" and gen2["bg"].startswith("gen-")
+    assert gen2["ref"] == "kitchen"
     assert by_id["s03-books"] == {"id": "s03-books", "bg": "bg-books", "source": "fallback"}
+    assert gen1["bg"] == bg_name(load_brief(BG_BRIEF).scenes[0].bg_prompt, "books")
+    assert gen2["bg"] == bg_name(load_brief(BG_BRIEF).scenes[1].bg_prompt, "kitchen")
 
     html1 = (job / "film" / "compositions" / "s01-rain.html").read_text(encoding="utf-8")
     assert f"assets/bg/{gen1['bg']}.jpg" in html1
@@ -316,9 +325,10 @@ def test_existing_library_pictures_are_reused_without_http(env_factory, monkeypa
     lib = tmp_path / "lib"
     lib.mkdir()
     brief = load_brief(BG_BRIEF)
-    for scene in brief.scenes:
+    for index, scene in enumerate(brief.scenes):
         if scene.bg_prompt:
-            (lib / f"{bg_name(scene.bg_prompt)}.jpg").write_bytes(b"reused")
+            ref = pick_style_ref(scene.bg_prompt, index)
+            (lib / f"{bg_name(scene.bg_prompt, ref)}.jpg").write_bytes(b"reused")
 
     def no_http(request):
         raise AssertionError("a library hit must not call the API")
@@ -330,9 +340,12 @@ def test_existing_library_pictures_are_reused_without_http(env_factory, monkeypa
 
     _data, by_id = _read_scene_records(job)
     assert by_id["s01-rain"]["source"] == "reused"
-    assert by_id["s01-rain"]["bg"] == bg_name(brief.scenes[0].bg_prompt)
+    assert by_id["s01-rain"]["ref"] == "books"
+    assert by_id["s01-rain"]["bg"] == bg_name(brief.scenes[0].bg_prompt, "books")
     assert by_id["s02-tea"]["source"] == "reused"
+    assert by_id["s02-tea"]["ref"] == "kitchen"
     assert by_id["s03-books"]["source"] == "fallback"
+    assert "ref" not in by_id["s03-books"]
     assert (job / "film" / "assets" / "bg" / f"{by_id['s01-rain']['bg']}.jpg").read_bytes() == b"reused"
     assert not (lib / "index.jsonl").exists()
 

@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO))
 from shorts.brief import full_narration, load_brief
 from shorts.captions import make_chunks, write_srt
 from shorts.film import film_updates, presenter_poses, scene_times
-from shorts.images import ImageError, LIBRARY, MODEL, bg_name, get_bg
+from shorts.images import ImageError, LIBRARY, MODEL, bg_name, get_bg, pick_style_ref
 from shorts.look import PALETTE, cozy_captions_html, cozy_scene_html
 from shorts.music import mix_command, pick_track
 from shorts.runner import StepError, run
@@ -82,9 +82,10 @@ def main(argv=None):
         picks: dict[str, dict] = {}
         notes: list[str] = []
         env_warned = False
-        for scene in brief.scenes:
+        for index, scene in enumerate(brief.scenes):
             name = scene.bg or "bg-books"
             source = "fallback"
+            ref = ""
             if scene.bg_prompt and not args.no_images:
                 if not (account and token):
                     if not env_warned:
@@ -93,9 +94,10 @@ def main(argv=None):
                         notes.append(note)
                         env_warned = True
                 else:
+                    ref = pick_style_ref(scene.bg_prompt, index)
                     try:
-                        reused = (LIBRARY / f"{bg_name(scene.bg_prompt)}.jpg").is_file()
-                        name = get_bg(scene.bg_prompt, account, token)
+                        reused = (LIBRARY / f"{bg_name(scene.bg_prompt, ref)}.jpg").is_file()
+                        name = get_bg(scene.bg_prompt, account, token, index=index)
                         source = "reused" if reused else "generated"
                     except ImageError as exc:
                         note = f"scene {scene.id}: background failed ({exc}) - using {name}"
@@ -103,7 +105,10 @@ def main(argv=None):
                         notes.append(note)
                         name = scene.bg or "bg-books"
                         source = "fallback"
+                        ref = ""
             picks[scene.id] = {"bg": name, "source": source}
+            if ref:
+                picks[scene.id]["ref"] = ref
         (job / "images.json").write_text(json.dumps(
             {"model": MODEL, "scenes": [dict(id=sid, **picks[sid]) for sid in picks]}, indent=1),
             encoding="utf-8")
