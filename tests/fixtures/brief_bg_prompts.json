@@ -1,0 +1,29 @@
+{
+ "slug": "rainy-evening",
+ "title": "Rain that keeps us in",
+ "cta": "Follow for more",
+ "scenes": [
+  {
+   "id": "s01-rain",
+   "narration": "Rain taps on the window.",
+   "headline": "Rain outside",
+   "pose": "idle",
+   "bg_prompt": "a cozy window seat with rain running down the glass, warm lamp light"
+  },
+  {
+   "id": "s02-tea",
+   "narration": "The kettle hums its old song.",
+   "headline": "Kettle song",
+   "pose": "present",
+   "bg": "bg-kitchen",
+   "bg_prompt": "a small kitchen kettle steaming in warm evening light"
+  },
+  {
+   "id": "s03-books",
+   "narration": "Books wait on the shelf.",
+   "headline": "Old friends",
+   "pose": "point",
+   "bg": "bg-books"
+  }
+ ]
+}

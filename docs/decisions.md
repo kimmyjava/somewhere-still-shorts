@@ -29,6 +29,18 @@
 - Automatic: Cloudflare Workers AI free tier (10,000 neurons/day), FLUX models.
 - Gemini API images are paid only (no free tier). Optional test later.
 
+## Backgrounds (2026-10-20, task 08, unit-tested offline)
+- Model: Cloudflare Workers AI @cf/black-forest-labs/flux-2-klein-4b, 768x1344 JPG (shorts/images.py).
+- Style: every call sends assets/bg/style-ref.jpg as image 0; the prompt wrapper (STYLE_PREFIX/SUFFIX)
+  asks the model to copy only style and colours - warm amber light, cozy shadows, no people/animals/text.
+- Cost: about 160 neurons per picture; free 10,000 neurons/day = about 60 pictures.
+- Library: C:/shorts/bg-library (outside the repo). One picture per prompt, name gen-<12 hex> =
+  sha256 of the normalized prompt; the same prompt never calls the API twice. index.jsonl logs
+  file, prompt, model, created.
+- Never fail a job for a picture: missing CF_ACCOUNT_ID / CF_API_TOKEN, --no-images or an API error
+  (one retry on timeout / 5xx) falls back to the scene's fixed bg (or bg-books). Per-scene record
+  with generated / reused / fallback in <job>/images.json.
+
 ## Music
 - Library of 15-20 tracks downloaded once (YouTube Audio Library first), tagged by mood.
 - Worker picks by mood, cuts to length, ducks under the voice (KAPE bgm-cut.py / master-audio idea).
