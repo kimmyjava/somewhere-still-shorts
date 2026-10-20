@@ -39,11 +39,35 @@ def test_fixture_loads():
     assert brief.scenes[0].narration.startswith("Some places stay with us")
 
 
-def test_bg_required(tmp_path):
+def test_scene_without_bg_and_bg_prompt_rejected(tmp_path):
     d = good_brief()
     del d["scenes"][0]["bg"]
-    with pytest.raises(BriefError, match="bg is missing"):
+    with pytest.raises(BriefError, match="needs bg or bg_prompt"):
         load_brief(write_brief(tmp_path, d))
+
+
+def test_bg_prompt_only_is_ok(tmp_path):
+    d = good_brief()
+    del d["scenes"][0]["bg"]
+    d["scenes"][0]["bg_prompt"] = "a rainy cobblestone street at dusk"
+    brief = load_brief(write_brief(tmp_path, d))
+    assert brief.scenes[0].bg == ""
+    assert brief.scenes[0].bg_prompt == "a rainy cobblestone street at dusk"
+
+
+def test_bg_prompt_longer_than_400_rejected(tmp_path):
+    d = good_brief()
+    d["scenes"][0]["bg_prompt"] = "x" * 401
+    with pytest.raises(BriefError, match="bg_prompt is 401 characters"):
+        load_brief(write_brief(tmp_path, d))
+
+
+def test_bg_prompt_of_400_is_ok(tmp_path):
+    d = good_brief()
+    del d["scenes"][0]["bg"]
+    d["scenes"][0]["bg_prompt"] = "x" * 400
+    brief = load_brief(write_brief(tmp_path, d))
+    assert brief.scenes[0].bg_prompt == "x" * 400
 
 
 def test_missing_bg_image_rejected(tmp_path):

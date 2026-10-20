@@ -4,10 +4,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from shorts.images import LIBRARY
+
 SLUG_RE = re.compile(r"^[a-z0-9-]+$")
 SCENE_ID_RE = re.compile(r"^s\d{2}-[a-z0-9-]+$")
 POSES = ("idle", "wave", "point", "present", "think", "thumbs-up", "celebrate", "sit", "walk")
 MAX_HEADLINE = 40
+MAX_BG_PROMPT = 400
 MAX_SCENES = 20
 REPO = Path(__file__).resolve().parents[1]
 
@@ -21,8 +24,9 @@ class Scene:
     id: str
     narration: str
     headline: str
-    bg: str
+    bg: str = ""
     pose: str = "idle"
+    bg_prompt: str = ""
 
 
 @dataclass
@@ -66,14 +70,20 @@ def load_brief(path: Path) -> Brief:
         if len(headline) > MAX_HEADLINE:
             raise BriefError(f"scene {sid}: headline is {len(headline)} characters (max {MAX_HEADLINE})")
         bg = str(raw.get("bg", ""))
-        if not bg:
-            raise BriefError(f"scene {sid}: bg is missing")
-        if not (REPO / "assets" / "bg" / f"{bg}.jpg").is_file():
-            raise BriefError(f"scene {sid}: assets/bg/{bg}.jpg does not exist")
+        bg_prompt = str(raw.get("bg_prompt", ""))
+        if not bg and not bg_prompt.strip():
+            raise BriefError(f"scene {sid}: needs bg or bg_prompt")
+        if len(bg_prompt) > MAX_BG_PROMPT:
+            raise BriefError(
+                f"scene {sid}: bg_prompt is {len(bg_prompt)} characters (max {MAX_BG_PROMPT})")
+        if bg and not (REPO / "assets" / "bg" / f"{bg}.jpg").is_file() \
+                and not (LIBRARY / f"{bg}.jpg").is_file():
+            raise BriefError(f"scene {sid}: assets/bg/{bg}.jpg does not exist in the repo or the library")
         pose = str(raw.get("pose", "idle"))
         if pose not in POSES:
             raise BriefError(f"scene {sid}: pose {pose!r} is not one of {', '.join(POSES)}")
-        scenes.append(Scene(id=sid, narration=narration, headline=headline, bg=bg, pose=pose))
+        scenes.append(Scene(id=sid, narration=narration, headline=headline, bg=bg, pose=pose,
+                            bg_prompt=bg_prompt))
 
     return Brief(slug=slug, title=str(data.get("title", "")), scenes=scenes,
                  cta=str(data.get("cta", "Follow for more")), music=str(data.get("music", "calm")))
