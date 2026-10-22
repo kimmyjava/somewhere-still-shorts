@@ -2,7 +2,7 @@
 
 ## What this project is
 A local worker on a Windows laptop that turns a validated video brief (JSON) into a
-finished vertical YouTube Short (1080x1920 MP4, 60 seconds to 3 minutes) for the
+finished vertical YouTube Short (1080x1920 MP4, 40 to 60 seconds) for the
 channel "Somewhere Still" (cozy, nostalgic, calm).
 Read docs/decisions.md before every task. It lists what is already decided and measured.
 

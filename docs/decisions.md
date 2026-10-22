@@ -2,7 +2,7 @@
 
 ## Content
 - Channel: Somewhere Still. Mood: cozy, nostalgic, calm, gentle motion, soft fades.
-- Length: 60 seconds to 3 minutes, vertical 1080x1920.
+- Length: 40 to 60 seconds, vertical 1080x1920.
 - Mascot: our own curly-haired girl with round glasses, cream cable-knit sweater, brown plaid pants, bear slippers. Prepared files in assets/mascot (copy installed in ~/.kape-explainer/profile/mascot). Poses: idle, point, wave, present, think, thumbs-up, celebrate, sit, rest. Expressions (not used yet) in assets/mascot/expressions. Point is not mirrored. Blinks off for now.
 - Captions: on, word-timed, script spelling (not Whisper spelling).
 
@@ -56,7 +56,8 @@
 
 ## Gateway
 - Local job gateway: FastAPI, bound to 127.0.0.1:8787 ONLY (tools/gateway.py); n8n reaches it
-  through a Cloudflare Tunnel, never an open port.
+  through a Tailscale Funnel (https), never an open port. Cloudflare is only used for background
+  images (Workers AI).
 - Auth: X-API-Key header compared against the SHORTS_API_KEY env var (>= 32 chars, never logged
   or returned). One worker thread, one job at a time; status in <job>/status.json.
 - Voicebox stays on 127.0.0.1:17493 and is never exposed; /health only reports its up/down.
