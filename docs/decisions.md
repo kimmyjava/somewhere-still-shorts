@@ -32,8 +32,10 @@
 ## Backgrounds (2026-10-20, tasks 08-09, unit-tested offline)
 - Model: Cloudflare Workers AI @cf/black-forest-labs/flux-2-klein-4b, 768x1344 JPG (shorts/images.py).
 - Style: three style refs in assets/bg/ - style-ref.jpg (books), style-ref-kitchen.jpg,
-  style-ref-street.jpg. One ref is sent per scene as image 0; the prompt wrapper (STYLE_PREFIX/SUFFIX)
-  asks the model to copy only style and colours - warm amber light, cozy shadows, no people/animals/text.
+  style-ref-street.jpg. One ref is sent per scene as image 0; the prompt (scene-first, STYLE_TEXT
+  then STYLE_SUFFIX) starts with "Scene: <scene>" and asks the model to copy only the ref's style,
+  brushwork and colours - never its objects, furniture or layout - and to take lighting, weather
+  and time of day from the scene text (warm nostalgic storybook look, no people/animals/text).
 - Ref per scene (pick_style_ref): kitchen words (kitchen, stove, kettle, table, mug, cafe) -> kitchen
   ref; street/outside words (street, outside, road, town, garden, porch, sky, park, car) -> street
   ref; otherwise the refs rotate books -> kitchen -> street by scene index, so scenes do not all
