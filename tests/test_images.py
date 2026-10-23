@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from shorts.images import (STYLE_PREFIX, STYLE_REFS, STYLE_SUFFIX, MODEL, ImageError, bg_name,
+from shorts.images import (STYLE_REFS, STYLE_SUFFIX, STYLE_TEXT, MODEL, ImageError, bg_name,
                            build_prompt, generate_bg, get_bg, pick_style_ref)
 
 ACCOUNT = "acct-123"
@@ -26,12 +26,15 @@ def ok_handler(request: httpx.Request) -> httpx.Response:
     assert b'name="width"' in body
     assert b'name="height"' in body
     assert b'name="input_image_0"' in body
-    assert STYLE_PREFIX.encode() in body
+    assert b"Scene: " in body
+    assert STYLE_TEXT.encode() in body
     return httpx.Response(200, json={"result": {"image": FAKE_JPG}, "success": True})
 
 
-def test_build_prompt_wraps_and_strips():
-    assert build_prompt(PROMPT) == STYLE_PREFIX + "a rainy street with warm lamps" + STYLE_SUFFIX
+def test_build_prompt_scene_first_then_style_then_suffix():
+    prompt = build_prompt(PROMPT)
+    assert prompt == "Scene: " + "a rainy street with warm lamps" + " " + STYLE_TEXT + STYLE_SUFFIX
+    assert prompt.index("Scene: ") < prompt.index(STYLE_TEXT) < prompt.index(STYLE_SUFFIX)
 
 
 def test_bg_name_is_stable_hash():

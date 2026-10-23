@@ -37,10 +37,10 @@ STREET_WORDS = ("street", "outside", "road", "town", "garden", "porch", "sky", "
 API_ROOT = "https://api.cloudflare.com/client/v4/accounts"
 TIMEOUT_S = 120.0
 
-STYLE_PREFIX = (
-    "Detailed cozy digital painting in the exact art style and colour palette of image 0 "
-    "(copy only the style and colours, not its objects or layout): rich warm amber light and deep "
-    "cozy shadows, soft glowing lights, painterly storybook details, nostalgic and calm. Scene: "
+STYLE_TEXT = (
+    "Painted in the exact art style and colour palette of image 0, but copy only its style, "
+    "brushwork and colours, never its objects, furniture or layout: detailed cozy storybook digital "
+    "painting, warm and nostalgic. Use the lighting, weather and time of day described in the scene."
 )
 STYLE_SUFFIX = (
     " Full vertical composition filled to the bottom with cozy details. "
@@ -53,7 +53,7 @@ class ImageError(Exception):
 
 
 def build_prompt(bg_prompt: str) -> str:
-    return STYLE_PREFIX + bg_prompt.strip() + STYLE_SUFFIX
+    return "Scene: " + bg_prompt.strip() + " " + STYLE_TEXT + STYLE_SUFFIX
 
 
 def bg_name(bg_prompt: str, ref: str = "books") -> str:
