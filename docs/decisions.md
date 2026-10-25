@@ -13,6 +13,12 @@
 - Flow: POST /generate -> poll GET /history/{id} until completed/failed -> GET /audio/{id} (WAV).
 - Speed on this laptop (CPU only): 17.4 s of audio took 221 s (first run, incl. model load).
 - Voicebox has no Tagalog. English narration only for now.
+- Per-scene voice (2026-10-25): each scene's narration is generated separately (same profile,
+  engine and seed 42) and cached as <job>/voice/<scene_id>.wav; parts are reused when they exist
+  unless --redo-voice. Parts are joined into <job>/vo.wav with 0.35 s of silence between scenes
+  (stdlib wave, shorts/tts/join.py); all parts must share sample rate, sample width and channels.
+- --redo-scene <scene_id> (repeatable) deletes only that scene's cached part and regenerates it
+  with seed + 1 (a different take), then rejoins vo.wav and reruns timing, film and render.
 
 ## Word timings (tested 2026-10-16)
 - vendor KAPE scripts/transcribe.py, faster-whisper "medium", --lang en.

@@ -2,6 +2,7 @@
 
 usage: C:/shorts/venv/Scripts/python tools/make_short.py --brief brief.json [--jobs-root C:/shorts/jobs]
        [--fps 30] [--quality draft] [--no-images] [--no-render] [--redo-voice]
+       [--redo-scene SCENE_ID ...]
 Per-step logs: <jobs-root>/<slug>/logs/<step>.log. Final video: <jobs-root>/<slug>/<slug>.mp4.
 AI backgrounds need CF_ACCOUNT_ID and CF_API_TOKEN in the environment; without them (or with
 --no-images, or when a picture fails) scenes fall back to their fixed bg and the job still runs.
@@ -30,9 +31,11 @@ from shorts.music import mix_command, pick_track
 from shorts.runner import StepError, run
 from shorts.timing import align, load_whisper_words, transcribe
 from shorts.tts.base import VoiceSpec
+from shorts.tts.join import join_parts
 from shorts.tts.voicebox import VoiceboxTTS
 
 DEFAULT_PROFILE_ID = "ac52122c-5b02-4c66-b00d-ba5bb47b65f7"
+SEED = 42
 KAPE = REPO / "vendor" / "kape-explainer" / "skills" / "kape-explainer"
 ENGINE = REPO / "vendor" / "kape-explainer" / "skills" / "spatial-film"
 
@@ -65,7 +68,11 @@ def main(argv=None):
     ap.add_argument("--no-images", action="store_true",
                     help="skip AI backgrounds; use the fixed bg library only")
     ap.add_argument("--no-render", action="store_true", help="stop after the hyperframes check")
-    ap.add_argument("--redo-voice", action="store_true", help="synthesize even if job/vo.wav exists")
+    ap.add_argument("--redo-voice", action="store_true",
+                    help="regenerate every scene's voice part even if cached")
+    ap.add_argument("--redo-scene", action="append", default=[], metavar="SCENE_ID",
+                    dest="redo_scenes",
+                    help="regenerate one scene's voice part with seed + 1 (a different take); repeatable")
     ap.add_argument("--music-dir", default="C:/shorts/music", help="folder with <mood>-NN.mp3 tracks")
     ap.add_argument("--no-music", action="store_true", help="skip the music mix")
     args = ap.parse_args(argv)
@@ -118,13 +125,33 @@ def main(argv=None):
     vo = job / "vo.wav"
 
     def voice():
-        if vo.exists() and not args.redo_voice:
-            return "reused existing vo.wav"
-        tts = VoiceboxTTS()
-        if not tts.health():
-            raise StepError("Open the Voicebox app first")
-        result = tts.synthesize(full_narration(brief), VoiceSpec(profile_id=DEFAULT_PROFILE_ID), vo)
-        return f"synthesized {result.duration_s:.2f}s in {result.seconds_taken:.1f}s ({result.engine})"
+        voice_dir = job / "voice"
+        voice_dir.mkdir(exist_ok=True)
+        redo = set(args.redo_scenes)
+        unknown = sorted(redo - {scene.id for scene in brief.scenes})
+        if unknown:
+            raise StepError(f"--redo-scene: no scene(s) named {', '.join(unknown)}")
+        parts = [voice_dir / f"{scene.id}.wav" for scene in brief.scenes]
+        if args.redo_voice:
+            for part in parts:
+                part.unlink(missing_ok=True)
+        for sid in redo:
+            (voice_dir / f"{sid}.wav").unlink(missing_ok=True)
+        todo = [scene for scene, part in zip(brief.scenes, parts) if not part.exists()]
+        notes = []
+        if todo:
+            tts = VoiceboxTTS()
+            if not tts.health():
+                raise StepError("Open the Voicebox app first")
+            for scene in todo:
+                seed = SEED + 1 if scene.id in redo else SEED
+                result = tts.synthesize(
+                    scene.narration, VoiceSpec(profile_id=DEFAULT_PROFILE_ID, seed=seed),
+                    voice_dir / f"{scene.id}.wav")
+                notes.append(f"{scene.id} {result.duration_s:.2f}s seed={seed}")
+        seconds = join_parts(parts, vo)
+        detail = "; ".join(notes) if notes else "reused all cached parts"
+        return f"joined {len(parts)} parts into {seconds:.2f}s ({detail})"
 
     _log_step(logs, "c-voice", _timed("c-voice", voice))
 
