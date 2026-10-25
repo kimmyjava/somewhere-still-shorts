@@ -4,6 +4,7 @@ import functools
 import importlib.util
 import json
 import sys
+import wave
 from pathlib import Path
 
 import httpx
@@ -23,9 +24,21 @@ _spec = importlib.util.spec_from_file_location("make_short", ROOT / "tools" / "m
 make_short = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(make_short)
 
+TTS_RATE = 24000
+
+
+def write_fake_wav(path, payload, rate=TTS_RATE):
+    raw = (payload * 4000).encode("utf-8")[:1200 * 2]
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(raw)
+
 
 class FakeTTS:
     instances = []
+    calls = []
 
     def __init__(self, *a, **k):
         type(self).instances.append(self)
@@ -34,7 +47,8 @@ class FakeTTS:
         return True
 
     def synthesize(self, text, voice, out_wav):
-        Path(out_wav).write_bytes(b"RIFFfake")
+        type(self).calls.append({"text": text, "seed": voice.seed, "out": Path(out_wav)})
+        write_fake_wav(Path(out_wav), f"{text}|seed={voice.seed}")
         return TTSResult(path=Path(out_wav), duration_s=13.9, seconds_taken=1.2, engine="qwen")
 
 
@@ -48,6 +62,8 @@ def env_factory(tmp_path, monkeypatch):
     def make(brief_path):
         narration = full_narration(load_brief(brief_path))
         calls = []
+        FakeTTS.instances.clear()
+        FakeTTS.calls.clear()
 
         def fake_run(cmd, cwd=None, log_path=None, timeout_s=600):
             cmd = [str(c) for c in cmd]
@@ -111,7 +127,8 @@ def env_factory(tmp_path, monkeypatch):
         music_dir.mkdir(exist_ok=True)
         for n in ("calm-01.mp3", "calm-02.mp3", "cozy-01.mp3"):
             (music_dir / n).write_bytes(b"")
-        return {"calls": calls, "jobs": tmp_path / "jobs", "music": music_dir, "brief": brief_path}
+        return {"calls": calls, "tts_calls": FakeTTS.calls, "jobs": tmp_path / "jobs",
+                "music": music_dir, "brief": brief_path}
     return make
 
 
@@ -241,6 +258,104 @@ def test_existing_voice_is_reused_and_redo_voice_regenerates(env):
     assert len(FakeTTS.instances) == before + 1
     run_main(env, "--no-render", "--redo-voice")
     assert len(FakeTTS.instances) == before + 2
+
+
+def _part_frames(path):
+    with wave.open(str(path), "rb") as w:
+        return w.readframes(w.getnframes())
+
+
+def test_voice_parts_generated_per_scene_and_joined_with_pause(env):
+    job = run_main(env, "--no-render")
+    brief = load_brief(env["brief"])
+    parts = [job / "voice" / f"{scene.id}.wav" for scene in brief.scenes]
+
+    assert all(part.is_file() for part in parts)
+    assert [c["text"] for c in env["tts_calls"]] == [scene.narration for scene in brief.scenes]
+    assert all(c["seed"] == 42 for c in env["tts_calls"])
+
+    silence = b"\x00" * (int(round(24000 * 0.35)) * 2)
+    with wave.open(str(job / "vo.wav"), "rb") as w:
+        assert w.getframerate() == 24000
+        joined = w.readframes(w.getnframes())
+    assert joined == _part_frames(parts[0]) + silence + _part_frames(parts[1]) + silence \
+        + _part_frames(parts[2])
+
+
+def test_cached_parts_are_reused_on_second_run(env):
+    job = run_main(env, "--no-render")
+    parts = sorted((job / "voice").glob("*.wav"))
+    before_frames = [_part_frames(p) for p in parts]
+    calls_after_first = len(env["tts_calls"])
+    assert calls_after_first == 3
+
+    job2 = run_main(env, "--no-render")
+
+    assert len(env["tts_calls"]) == calls_after_first
+    assert [_part_frames(p) for p in parts] == before_frames
+    silence = b"\x00" * (int(round(24000 * 0.35)) * 2)
+    with wave.open(str(job2 / "vo.wav"), "rb") as w:
+        assert w.readframes(w.getnframes()) == silence.join(before_frames)
+
+
+def test_redo_voice_regenerates_every_part(env):
+    job = run_main(env, "--no-render")
+    parts = sorted((job / "voice").glob("*.wav"))
+    for part in parts:
+        write_fake_wav(part, "stale-take")
+    stale = [_part_frames(p) for p in parts]
+
+    run_main(env, "--no-render", "--redo-voice")
+
+    assert len(env["tts_calls"]) == 6
+    assert all(c["seed"] == 42 for c in env["tts_calls"][3:])
+    assert [_part_frames(p) for p in parts] != stale
+    silence = b"\x00" * (int(round(24000 * 0.35)) * 2)
+    with wave.open(str(job / "vo.wav"), "rb") as w:
+        assert w.readframes(w.getnframes()) == silence.join(_part_frames(p) for p in parts)
+
+
+def test_redo_scene_regenerates_only_that_scene_with_seed_plus_one(env):
+    job = run_main(env, "--no-render")
+    brief = load_brief(env["brief"])
+    parts = {scene.id: job / "voice" / f"{scene.id}.wav" for scene in brief.scenes}
+    before = {sid: _part_frames(p) for sid, p in parts.items()}
+
+    run_main(env, "--no-render", "--redo-scene", "s02-memories")
+
+    assert len(env["tts_calls"]) == 4
+    redo_call = env["tts_calls"][-1]
+    assert redo_call["text"] == brief.scenes[1].narration
+    assert redo_call["seed"] == 43
+    assert redo_call["out"] == parts["s02-memories"]
+    assert _part_frames(parts["s01-places"]) == before["s01-places"]
+    assert _part_frames(parts["s03-back"]) == before["s03-back"]
+    assert _part_frames(parts["s02-memories"]) != before["s02-memories"]
+    silence = b"\x00" * (int(round(24000 * 0.35)) * 2)
+    with wave.open(str(job / "vo.wav"), "rb") as w:
+        joined = w.readframes(w.getnframes())
+    assert joined == before["s01-places"] + silence + _part_frames(parts["s02-memories"]) \
+        + silence + before["s03-back"]
+
+    # the redone part is now cached like any other
+    run_main(env, "--no-render")
+    assert len(env["tts_calls"]) == 4
+
+
+def test_redo_scene_twice_regenerates_both_scenes(env):
+    run_main(env, "--no-render")
+
+    run_main(env, "--no-render", "--redo-scene", "s01-places", "--redo-scene", "s03-back")
+
+    assert len(env["tts_calls"]) == 5
+    assert [c["seed"] for c in env["tts_calls"][3:]] == [43, 43]
+    assert [Path(c["out"]).name for c in env["tts_calls"][3:]] == ["s01-places.wav", "s03-back.wav"]
+
+
+def test_redo_scene_with_unknown_id_fails(env):
+    with pytest.raises(StepError, match="s99-nope"):
+        run_main(env, "--no-render", "--redo-scene", "s99-nope")
+    assert env["tts_calls"] == []
 
 
 def test_unhealthy_voicebox_fails_before_anything_else(tmp_path, monkeypatch):
