@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from shorts.images import (STYLE_REFS, STYLE_SUFFIX, STYLE_TEXT, MODEL, ImageError, bg_name,
-                           build_prompt, generate_bg, get_bg, pick_style_ref)
+                           build_prompt, generate_bg, get_bg, library_ref, pick_style_ref)
 
 ACCOUNT = "acct-123"
 TOKEN = "tok-secret-9876"
@@ -25,7 +25,7 @@ def ok_handler(request: httpx.Request) -> httpx.Response:
     assert b'name="prompt"' in body
     assert b'name="width"' in body
     assert b'name="height"' in body
-    assert b'name="input_image_0"' in body
+    assert b'name="input_image_0"' not in body
     assert b"Scene: " in body
     assert STYLE_TEXT.encode() in body
     return httpx.Response(200, json={"result": {"image": FAKE_JPG}, "success": True})
@@ -35,6 +35,11 @@ def test_build_prompt_scene_first_then_style_then_suffix():
     prompt = build_prompt(PROMPT)
     assert prompt == "Scene: " + "a rainy street with warm lamps" + " " + STYLE_TEXT + STYLE_SUFFIX
     assert prompt.index("Scene: ") < prompt.index(STYLE_TEXT) < prompt.index(STYLE_SUFFIX)
+
+
+def test_prompt_mentions_no_reference_image():
+    assert "image 0" not in build_prompt(PROMPT)
+    assert "nobody present" in STYLE_SUFFIX
 
 
 def test_bg_name_is_stable_hash():
@@ -47,6 +52,16 @@ def test_bg_name_is_stable_hash():
 def test_bg_name_changes_with_style_ref():
     names = {ref: bg_name("the same words", ref) for ref in ("books", "kitchen", "street")}
     assert len(set(names.values())) == 3
+
+
+def test_bg_name_noref_differs_from_every_ref_version():
+    no_ref = bg_name("the same words", "noref")
+    assert no_ref not in {bg_name("the same words", ref) for ref in ("books", "kitchen", "street")}
+
+
+def test_library_ref_is_noref_while_style_refs_are_off():
+    assert [library_ref(NEUTRAL, i) for i in range(6)] == ["noref"] * 6
+    assert library_ref("a stove and a mug on the counter", 0) == "noref"
 
 
 @pytest.mark.parametrize("prompt,expected", [
@@ -71,7 +86,7 @@ def test_pick_style_ref_rotates_by_index(index, expected):
     assert pick_style_ref(NEUTRAL, index) == expected
 
 
-def test_generate_bg_sends_chosen_style_ref(tmp_path):
+def test_generate_bg_sends_chosen_style_ref_when_given_explicitly(tmp_path):
     def handler(request):
         body = request.read()
         assert b'name="input_image_0"' in body
@@ -101,14 +116,14 @@ def test_top_level_image_fallback(tmp_path):
 def test_get_bg_writes_library_and_index(tmp_path):
     lib = tmp_path / "library"
     name = get_bg(PROMPT, ACCOUNT, TOKEN, client=mock_client(ok_handler), library=lib)
-    assert name == bg_name(PROMPT, "street")
+    assert name == bg_name(PROMPT, "noref")
     assert (lib / f"{name}.jpg").read_bytes() == b"fakejpg-bytes"
     lines = (lib / "index.jsonl").read_text(encoding="utf-8").splitlines()
     entry = json.loads(lines[-1])
     assert entry["file"] == f"{name}.jpg"
     assert entry["prompt"] == build_prompt(PROMPT)
     assert entry["model"] == MODEL
-    assert entry["style_ref"] == "street"
+    assert entry["style_ref"] == "noref"
     assert entry["created"]
 
 
@@ -122,11 +137,11 @@ def test_get_bg_reuses_without_new_http_call(tmp_path):
     lib = tmp_path / "library"
     first = get_bg(PROMPT, ACCOUNT, TOKEN, client=mock_client(counting), library=lib)
     second = get_bg(PROMPT, ACCOUNT, TOKEN, client=mock_client(counting), library=lib)
-    assert first == second == bg_name(PROMPT, "street")
+    assert first == second == bg_name(PROMPT, "noref")
     assert len(calls) == 1
 
 
-def test_same_prompt_other_ref_is_a_different_picture(tmp_path):
+def test_same_prompt_is_one_picture_regardless_of_index(tmp_path):
     calls = []
 
     def counting(request):
@@ -136,12 +151,11 @@ def test_same_prompt_other_ref_is_a_different_picture(tmp_path):
     lib = tmp_path / "library"
     n0 = get_bg(NEUTRAL, ACCOUNT, TOKEN, client=mock_client(counting), library=lib, index=0)
     n1 = get_bg(NEUTRAL, ACCOUNT, TOKEN, client=mock_client(counting), library=lib, index=1)
-    assert n0 == bg_name(NEUTRAL, "books")
-    assert n1 == bg_name(NEUTRAL, "kitchen")
-    assert n0 != n1
-    assert len(calls) == 2
+    n2 = get_bg(NEUTRAL, ACCOUNT, TOKEN, client=mock_client(counting), library=lib, index=2)
+    assert n0 == n1 == n2 == bg_name(NEUTRAL, "noref")
+    assert len(calls) == 1
     entries = [json.loads(line) for line in (lib / "index.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert [e["style_ref"] for e in entries] == ["books", "kitchen"]
+    assert [e["style_ref"] for e in entries] == ["noref"]
 
 
 def test_http_500_twice_raises_image_error(tmp_path):

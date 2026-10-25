@@ -29,21 +29,22 @@
 - Automatic: Cloudflare Workers AI free tier (10,000 neurons/day), FLUX models.
 - Gemini API images are paid only (no free tier). Optional test later.
 
-## Backgrounds (2026-10-20, tasks 08-09, unit-tested offline)
+## Backgrounds (2026-10-20, tasks 08-09; refs off 2026-10-25 task 13, unit-tested offline)
 - Model: Cloudflare Workers AI @cf/black-forest-labs/flux-2-klein-4b, 768x1344 JPG (shorts/images.py).
-- Style: three style refs in assets/bg/ - style-ref.jpg (books), style-ref-kitchen.jpg,
-  style-ref-street.jpg. One ref is sent per scene as image 0; the prompt (scene-first, STYLE_TEXT
-  then STYLE_SUFFIX) starts with "Scene: <scene>" and asks the model to copy only the ref's style,
-  brushwork and colours - never its objects, furniture or layout - and to take lighting, weather
-  and time of day from the scene text (warm nostalgic storybook look, no people/animals/text).
-- Ref per scene (pick_style_ref): kitchen words (kitchen, stove, kettle, table, mug, cafe) -> kitchen
-  ref; street/outside words (street, outside, road, town, garden, porch, sky, park, car) -> street
-  ref; otherwise the refs rotate books -> kitchen -> street by scene index, so scenes do not all
-  look like the same room.
+- Style refs are OFF (USE_STYLE_REF = False, 2026-10-25): the model copied the reference pictures'
+  buildings and furniture into every scene, so no input_image_0 is sent any more. The look comes
+  from STYLE_TEXT only ("Cozy hand-painted storybook illustration ... calm and dreamy"), then
+  STYLE_SUFFIX (full vertical composition, empty scene, no people/animals/text).
+  pick_style_ref and the three refs in assets/bg/ stay in the code, unused, for later.
+- Refs as they worked when they were on (kept for later): one ref per scene as image 0;
+  kitchen words (kitchen, stove, kettle, table, mug, cafe) -> kitchen ref; street/outside words
+  (street, outside, road, town, garden, porch, sky, park, car) -> street ref; otherwise rotate
+  books -> kitchen -> street by scene index.
 - Cost: about 160 neurons per picture; free 10,000 neurons/day = about 60 pictures.
-- Library: C:/shorts/bg-library (outside the repo). One picture per prompt+ref pair, name gen-<12 hex>
-  = sha256 of normalized prompt + ref name; the same prompt with another ref is a different picture.
-  index.jsonl logs file, prompt, model, style_ref, created.
+- Library: C:/shorts/bg-library (outside the repo). One picture per prompt+ref-name pair,
+  name gen-<12 hex> = sha256 of normalized prompt + ref name; with refs off the name is "noref",
+  so old ref-based pictures are never reused. index.jsonl logs file, prompt, model, style_ref
+  ("noref"), created. images.json records "ref": null when no reference was sent.
 - Never fail a job for a picture: missing CF_ACCOUNT_ID / CF_API_TOKEN, --no-images or an API error
   (one retry on timeout / 5xx) falls back to the scene's fixed bg (or bg-books). Per-scene record
   with bg, ref, generated / reused / fallback in <job>/images.json.
