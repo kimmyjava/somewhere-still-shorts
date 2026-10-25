@@ -1,11 +1,15 @@
 """AI scene backgrounds: Cloudflare Workers AI FLUX.2 klein 4B in the Somewhere Still style.
 
-build_prompt(bg_prompt) -> the style-wrapped prompt sent to the model (one style ref image from
-                           STYLE_REFS goes with it as image 0 so every picture shares the look).
+build_prompt(bg_prompt) -> the style-wrapped prompt sent to the model. While USE_STYLE_REF is False
+                           no reference image is sent: the whole look comes from STYLE_TEXT (the
+                           picture refs leaked their buildings and furniture into every scene).
 pick_style_ref(bg_prompt, index) -> "books" / "kitchen" / "street": keywords choose the ref,
-                           otherwise the refs rotate by scene index so scenes do not all look alike.
+                           otherwise the refs rotate by scene index. Kept, unused, for later.
+library_ref(bg_prompt, index) -> the ref name baked into the library hash ("noref" while
+                           USE_STYLE_REF is False, so old ref-based pictures are never reused).
 generate_bg(prompt, out_path, account_id, token, client=None, style_ref=None) -> one API call (one
                            retry on timeout or HTTP 5xx), decodes result.image (or top-level image).
+                           input_image_0 is only sent when an explicit style_ref path is given.
 get_bg(bg_prompt, account_id, token, client=None, library=None, index=0) -> library name for the
                            prompt+ref pair, generating the picture once per pair.
 Library: C:/shorts/bg-library/<gen-hash>.jpg plus index.jsonl (file, prompt, model, style_ref,
@@ -26,6 +30,7 @@ WIDTH = 768
 HEIGHT = 1344
 LIBRARY = Path("C:/shorts/bg-library")
 REPO = Path(__file__).resolve().parents[1]
+USE_STYLE_REF = False
 STYLE_REFS = {
     "books": REPO / "assets" / "bg" / "style-ref.jpg",
     "kitchen": REPO / "assets" / "bg" / "style-ref-kitchen.jpg",
@@ -38,13 +43,13 @@ API_ROOT = "https://api.cloudflare.com/client/v4/accounts"
 TIMEOUT_S = 120.0
 
 STYLE_TEXT = (
-    "Painted in the exact art style and colour palette of image 0, but copy only its style, "
-    "brushwork and colours, never its objects, furniture or layout: detailed cozy storybook digital "
-    "painting, warm and nostalgic. Use the lighting, weather and time of day described in the scene."
+    "Cozy hand-painted storybook illustration, soft painterly brushwork with visible texture, "
+    "warm amber light and deep blue shadows, gentle glowing light sources, slightly muted "
+    "nostalgic colours, rich small details, calm and dreamy."
 )
 STYLE_SUFFIX = (
-    " Full vertical composition filled to the bottom with cozy details. "
-    "No people, no animals, no text, no letters."
+    " Full vertical composition filled to the bottom with details. "
+    "Empty scene, nobody present, no people, no animals, no text, no letters."
 )
 
 
@@ -64,6 +69,10 @@ def bg_name(bg_prompt: str, ref: str = "books") -> str:
 def _mentions(bg_prompt: str, words: tuple[str, ...]) -> bool:
     low = bg_prompt.lower()
     return any(re.search(rf"\b{re.escape(word)}\b", low) for word in words)
+
+
+def library_ref(bg_prompt: str, index: int = 0) -> str:
+    return pick_style_ref(bg_prompt, index) if USE_STYLE_REF else "noref"
 
 
 def pick_style_ref(bg_prompt: str, index: int) -> str:
@@ -108,9 +117,12 @@ def generate_bg(prompt: str, out_path: Path, account_id: str, token: str, client
                 style_ref: Path | None = None) -> Path:
     out_path = Path(out_path)
     url = f"{API_ROOT}/{account_id}/ai/run/{MODEL}"
-    form = {"prompt": prompt, "width": str(WIDTH), "height": str(HEIGHT)}
-    ref_path = Path(style_ref) if style_ref is not None else STYLE_REFS["books"]
-    files = {"input_image_0": (ref_path.name, ref_path.read_bytes(), "image/jpeg")}
+    ref_path = (Path(style_ref) if style_ref is not None
+                else (STYLE_REFS["books"] if USE_STYLE_REF else None))
+    files: dict = {"prompt": (None, prompt), "width": (None, str(WIDTH)),
+                   "height": (None, str(HEIGHT))}
+    if ref_path is not None:
+        files["input_image_0"] = (ref_path.name, ref_path.read_bytes(), "image/jpeg")
     headers = {"Authorization": f"Bearer {token}"}
     own = client is None
     http = client if client is not None else httpx.Client(timeout=TIMEOUT_S)
@@ -118,7 +130,7 @@ def generate_bg(prompt: str, out_path: Path, account_id: str, token: str, client
         problem = "Cloudflare never answered"
         for _ in (1, 2):
             try:
-                response = http.post(url, headers=headers, data=form, files=files)
+                response = http.post(url, headers=headers, files=files)
             except httpx.TimeoutException:
                 problem = f"timed out after {TIMEOUT_S:.0f}s"
                 continue
@@ -142,14 +154,15 @@ def generate_bg(prompt: str, out_path: Path, account_id: str, token: str, client
 def get_bg(bg_prompt: str, account_id: str, token: str, client=None, library: Path | None = None,
            index: int = 0) -> str:
     library = Path(library) if library is not None else LIBRARY
-    ref = pick_style_ref(bg_prompt, index)
+    ref = library_ref(bg_prompt, index)
     name = bg_name(bg_prompt, ref)
     out = library / f"{name}.jpg"
     if out.is_file():
         return name
     library.mkdir(parents=True, exist_ok=True)
     full_prompt = build_prompt(bg_prompt)
-    generate_bg(full_prompt, out, account_id, token, client, style_ref=STYLE_REFS[ref])
+    generate_bg(full_prompt, out, account_id, token, client,
+                style_ref=STYLE_REFS[ref] if USE_STYLE_REF else None)
     entry = {"file": out.name, "prompt": full_prompt, "model": MODEL, "style_ref": ref,
              "created": datetime.now().isoformat(timespec="seconds")}
     with (library / "index.jsonl").open("a", encoding="utf-8") as fh:
