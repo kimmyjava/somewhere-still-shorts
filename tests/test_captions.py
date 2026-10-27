@@ -48,6 +48,23 @@ def test_chunk_breaks_on_long_pause():
     assert [c.words[0].text for c in chunks] == ["one", "two"]
 
 
+def test_make_chunks_sorts_out_of_order_words_monotonic():
+    words = [
+        TimedWord("stops.", 1.5, 1.2),
+        TimedWord("never", 0.9, 1.2),
+        TimedWord("It", 0.6, 0.9),
+        TimedWord("rain", 0.3, 0.6),
+        TimedWord("The", 0.0, 0.3),
+    ]
+    chunks = make_chunks(words, max_words=3)
+    flat = [w for c in chunks for w in c.words]
+    assert [w.text for w in flat] == ["The", "rain", "It", "never", "stops."]
+    for prev, cur in zip(flat, flat[1:]):
+        assert cur.start >= prev.start
+    for w in flat:
+        assert w.end >= w.start + 0.05
+
+
 def test_write_srt_format(tmp_path):
     path = write_srt(make_chunks(chunk_words()), tmp_path / "captions.srt")
     blocks = path.read_text(encoding="utf-8").strip().split("\n\n")

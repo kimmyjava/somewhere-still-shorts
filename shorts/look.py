@@ -68,14 +68,25 @@ def cozy_scene_html(sid, dur, headline, bg, push=1.08):
 
 
 def cozy_captions_html(chunks, total, top=1250, left=470, right=70):
-    """chunks: list of CaptionChunk (TimedWord .text/.start/.end). Shows each chunk from its start to the next chunk; spoken word in accent."""
+    """chunks: list of CaptionChunk (TimedWord .text/.start/.end). Shows each chunk from its start to the next chunk; spoken word in accent.
+    Windows never overlap: chunks are ordered by start, every chunk hides before the next one shows
+    (each stays on screen at least 0.15 s; the next chunk's start is shifted if needed), and the last
+    chunk hides at min(last word end + 0.5, total)."""
+    ordered = sorted(chunks, key=lambda c: c.start)
+    starts = [c.start for c in ordered]
     html, js = [], []
-    for ci, ch in enumerate(chunks):
+    for ci, ch in enumerate(ordered):
+        if ci + 1 < len(ordered):
+            hide = starts[ci + 1]
+            if hide < starts[ci] + 0.15:
+                hide = starts[ci] + 0.15
+                starts[ci + 1] = hide
+        else:
+            hide = min(ch.words[-1].end + 0.5, total)
         spans = " ".join(f'<span id="cw{ci}-{wi}">{escape(w.text)}</span>' for wi, w in enumerate(ch.words))
         html.append(f'<div id="cc{ci}" class="cap">{spans}</div>')
-        end = chunks[ci + 1].start if ci + 1 < len(chunks) else min(ch.end, total)
-        js.append(f"tl.fromTo('#cc{ci}', {{opacity:0, y:10}}, {{opacity:1, y:0, duration:0.18, ease:'power2.out'}}, {round(ch.start, 3)});"
-                  f" tl.set('#cc{ci}', {{opacity:0}}, {round(end, 3)});")
+        js.append(f"tl.fromTo('#cc{ci}', {{opacity:0, y:10}}, {{opacity:1, y:0, duration:0.18, ease:'power2.out'}}, {round(starts[ci], 3)});"
+                  f" tl.set('#cc{ci}', {{opacity:0}}, {round(hide, 3)});")
         for wi, w in enumerate(ch.words):
             js.append(f"tl.set('#cw{ci}-{wi}', {{color:'{PALETTE['accent']}'}}, {round(w.start, 3)}); tl.set('#cw{ci}-{wi}', {{color:'{PALETTE['ink']}'}}, {round(w.end, 3)});")
     return f"""<template>

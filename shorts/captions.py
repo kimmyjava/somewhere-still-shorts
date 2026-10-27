@@ -13,7 +13,20 @@ class CaptionChunk:
     end: float
 
 
+def monotonic_words(timed_words: list[TimedWord]) -> list[TimedWord]:
+    """Sort words by start time and enforce monotonic times: each start >= the previous
+    start and every end >= start + 0.05, so caption windows can never go backwards."""
+    out: list[TimedWord] = []
+    prev_start = float("-inf")
+    for w in sorted(timed_words, key=lambda w: w.start):
+        start = max(w.start, prev_start)
+        out.append(TimedWord(w.text, start, max(w.end, start + 0.05)))
+        prev_start = start
+    return out
+
+
 def make_chunks(timed_words: list[TimedWord], max_words: int = 3, pause: float = 0.35) -> list[CaptionChunk]:
+    timed_words = monotonic_words(timed_words)
     groups: list[list[TimedWord]] = []
     cur: list[TimedWord] = []
     for w in timed_words:
