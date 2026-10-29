@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from shorts.images import LIBRARY
+from shorts.images import LIBRARY, STYLE_TEXTS
 
 SLUG_RE = re.compile(r"^[a-z0-9-]+$")
 SCENE_ID_RE = re.compile(r"^s\d{2}-[a-z0-9-]+$")
@@ -36,6 +36,7 @@ class Brief:
     scenes: list[Scene]
     cta: str = "Follow for more"
     music: str = "calm"
+    style: str = "cozy"
 
 
 def load_brief(path: Path) -> Brief:
@@ -85,8 +86,15 @@ def load_brief(path: Path) -> Brief:
         scenes.append(Scene(id=sid, narration=narration, headline=headline, bg=bg, pose=pose,
                             bg_prompt=bg_prompt))
 
+    style = str(data.get("style", "cozy"))
+    if style not in STYLE_TEXTS:
+        print(f"WARNING: brief style {style!r} is not one of {', '.join(sorted(STYLE_TEXTS))} "
+              f"- using 'cozy'", flush=True)
+        style = "cozy"
+
     return Brief(slug=slug, title=str(data.get("title", "")), scenes=scenes,
-                 cta=str(data.get("cta", "Follow for more")), music=str(data.get("music", "calm")))
+                 cta=str(data.get("cta", "Follow for more")), music=str(data.get("music", "calm")),
+                 style=style)
 
 
 def full_narration(brief: Brief) -> str:

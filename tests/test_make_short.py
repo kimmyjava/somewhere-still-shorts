@@ -19,6 +19,7 @@ from shorts.tts.base import TTSResult
 ROOT = Path(__file__).resolve().parents[1]
 BRIEF = ROOT / "tests" / "fixtures" / "brief_kitchen.json"
 BG_BRIEF = ROOT / "tests" / "fixtures" / "brief_bg_prompts.json"
+STORYBOOK_BRIEF = ROOT / "tests" / "fixtures" / "brief_storybook.json"
 
 _spec = importlib.util.spec_from_file_location("make_short", ROOT / "tools" / "make_short.py")
 make_short = importlib.util.module_from_spec(_spec)
@@ -199,8 +200,10 @@ def test_make_short_flow_writes_files_in_order(env):
         assert (job / "logs" / f"{name}.log").is_file(), name
     _data, by_id = _read_scene_records(job)
     assert [s["id"] for s in _data["scenes"]] == ["s01-places", "s02-memories", "s03-back"]
-    assert by_id["s01-places"] == {"id": "s01-places", "bg": "bg-street", "source": "fallback"}
+    assert by_id["s01-places"] == {"id": "s01-places", "bg": "bg-street", "style": "cozy",
+                                   "source": "fallback"}
     assert by_id["s03-back"]["bg"] == "bg-books"
+    assert by_id["s03-back"]["style"] == "cozy"
 
     kinds = [c[0] for c in env["calls"]]
     assert kinds == ["ffprobe", "node", "ffmpeg", sys.executable, sys.executable, sys.executable, "npx"]
@@ -216,6 +219,33 @@ def test_presenter_track_mirror_is_empty(env):
     job = run_main(env, "--no-render")
     track = json.loads((job / "film" / "src" / "presenter-track.json").read_text(encoding="utf-8"))
     assert track["mirror"] == []
+
+
+def test_storybook_style_zooms_from_1_06(env_factory):
+    env = env_factory(STORYBOOK_BRIEF)
+    job = run_main(env, "--no-render")
+
+    brief = load_brief(STORYBOOK_BRIEF)
+    assert brief.style == "storybook"
+    _data, by_id = _read_scene_records(job)
+    assert all(by_id[s.id]["style"] == "storybook" for s in brief.scenes)
+    for scene in brief.scenes:
+        html = (job / "film" / "compositions" / f"{scene.id}.html").read_text(encoding="utf-8")
+        assert "{scale:1.06," in html, scene.id
+        assert "{scale:1.14," in html, scene.id
+        assert "{scale:1.0," not in html, scene.id
+        assert "{scale:1.08," not in html, scene.id
+    assert "style=storybook" in (job / "logs" / "a-brief.log").read_text(encoding="utf-8")
+
+
+def test_cozy_style_zoom_starts_at_1(env_factory):
+    env = env_factory(BRIEF)
+    job = run_main(env, "--no-render")
+
+    for name in ("s01-places", "s02-memories", "s03-back"):
+        html = (job / "film" / "compositions" / f"{name}.html").read_text(encoding="utf-8")
+        assert "{scale:1.0," in html, name
+        assert "{scale:1.08," in html, name
 
 
 def test_make_short_render_mixes_music(env):
@@ -411,12 +441,15 @@ def test_generated_backgrounds_flow_into_film(env_factory, monkeypatch, tmp_path
     assert data["model"] == shorts_images.MODEL
     gen1, gen2 = by_id["s01-rain"], by_id["s02-tea"]
     assert gen1["source"] == "generated" and gen1["bg"].startswith("gen-")
+    assert gen1["style"] == "cozy"
     assert gen1["ref"] is None
     assert gen2["source"] == "generated" and gen2["bg"].startswith("gen-")
+    assert gen2["style"] == "cozy"
     assert gen2["ref"] is None
-    assert by_id["s03-books"] == {"id": "s03-books", "bg": "bg-books", "source": "fallback"}
-    assert gen1["bg"] == bg_name(load_brief(BG_BRIEF).scenes[0].bg_prompt, "noref")
-    assert gen2["bg"] == bg_name(load_brief(BG_BRIEF).scenes[1].bg_prompt, "noref")
+    assert by_id["s03-books"] == {"id": "s03-books", "bg": "bg-books", "style": "cozy",
+                                  "source": "fallback"}
+    assert gen1["bg"] == bg_name(load_brief(BG_BRIEF).scenes[0].bg_prompt, "noref", "cozy")
+    assert gen2["bg"] == bg_name(load_brief(BG_BRIEF).scenes[1].bg_prompt, "noref", "cozy")
 
     html1 = (job / "film" / "compositions" / "s01-rain.html").read_text(encoding="utf-8")
     assert f"assets/bg/{gen1['bg']}.jpg" in html1
@@ -481,8 +514,10 @@ def test_image_failure_falls_back_and_job_still_succeeds(env_factory, monkeypatc
 
     assert len(http_calls) == 4
     _data, by_id = _read_scene_records(job)
-    assert by_id["s01-rain"] == {"id": "s01-rain", "bg": "bg-books", "source": "fallback"}
-    assert by_id["s02-tea"] == {"id": "s02-tea", "bg": "bg-kitchen", "source": "fallback"}
+    assert by_id["s01-rain"] == {"id": "s01-rain", "bg": "bg-books", "style": "cozy",
+                                 "source": "fallback"}
+    assert by_id["s02-tea"] == {"id": "s02-tea", "bg": "bg-kitchen", "style": "cozy",
+                                "source": "fallback"}
     html1 = (job / "film" / "compositions" / "s01-rain.html").read_text(encoding="utf-8")
     assert "assets/bg/bg-books.jpg" in html1
     assert (job / "film" / "assets" / "bg" / "bg-books.jpg").is_file()

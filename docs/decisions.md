@@ -53,7 +53,13 @@
   ("noref"), created. images.json records "ref": null when no reference was sent.
 - Never fail a job for a picture: missing CF_ACCOUNT_ID / CF_API_TOKEN, --no-images or an API error
   (one retry on timeout / 5xx) falls back to the scene's fixed bg (or bg-books). Per-scene record
-  with bg, ref, generated / reused / fallback in <job>/images.json.
+  with bg, style, ref, generated / reused / fallback in <job>/images.json.
+- Two picture styles (2026-10-29, task 16): the brief's top-level "style" picks "cozy" (default)
+  or "storybook"; n8n chooses per video. An unknown style logs a warning and falls back to cozy.
+  The style text is STYLE_TEXTS[style] in shorts/images.py (storybook = vintage picture-book
+  watercolour, ends "no border, no frame, no paper edges"), the library hash includes the style
+  (bg_name covers prompt + ref + style) and index.jsonl logs it. Storybook scenes start the Ken
+  Burns push at zoom 1.06 (cozy 1.0) so thin paper edges never show.
 
 ## Music
 - Library of 15-20 tracks downloaded once (YouTube Audio Library first), tagged by mood.

@@ -1,7 +1,8 @@
 """AI scene backgrounds: Cloudflare Workers AI FLUX.2 klein 4B in the Somewhere Still style.
 
-build_prompt(bg_prompt) -> the style-wrapped prompt sent to the model. While USE_STYLE_REF is False
-                           no reference image is sent: the whole look comes from STYLE_TEXT (the
+build_prompt(bg_prompt, style="cozy") -> the style-wrapped prompt sent to the model; style picks
+                           one of STYLE_TEXTS ("cozy" or "storybook"). While USE_STYLE_REF is False
+                           no reference image is sent: the whole look comes from the style text (the
                            picture refs leaked their buildings and furniture into every scene).
 pick_style_ref(bg_prompt, index) -> "books" / "kitchen" / "street": keywords choose the ref,
                            otherwise the refs rotate by scene index. Kept, unused, for later.
@@ -10,11 +11,11 @@ library_ref(bg_prompt, index) -> the ref name baked into the library hash ("nore
 generate_bg(prompt, out_path, account_id, token, client=None, style_ref=None) -> one API call (one
                            retry on timeout or HTTP 5xx), decodes result.image (or top-level image).
                            input_image_0 is only sent when an explicit style_ref path is given.
-get_bg(bg_prompt, account_id, token, client=None, library=None, index=0) -> library name for the
-                           prompt+ref pair, generating the picture once per pair.
+get_bg(bg_prompt, account_id, token, client=None, library=None, index=0, style="cozy") -> library
+                       name for the prompt+ref+style triple, generating the picture once per triple.
 Library: C:/shorts/bg-library/<gen-hash>.jpg plus index.jsonl (file, prompt, model, style_ref,
-created). The hash covers the prompt AND the ref name. Error messages carry Cloudflare's error
-text and never the token.
+style, created). The hash covers the prompt, the ref name AND the style. Error messages carry
+Cloudflare's error text and never the token.
 """
 import base64
 import hashlib
@@ -42,11 +43,26 @@ STREET_WORDS = ("street", "outside", "road", "town", "garden", "porch", "sky", "
 API_ROOT = "https://api.cloudflare.com/client/v4/accounts"
 TIMEOUT_S = 120.0
 
-STYLE_TEXT = (
-    "Cozy hand-painted storybook illustration, soft painterly brushwork with visible texture, "
-    "warm amber light and deep blue shadows, gentle glowing light sources, slightly muted "
-    "nostalgic colours, rich small details, calm and dreamy."
-)
+STYLE_TEXTS = {
+    "cozy": (
+        "Cozy hand-painted storybook illustration, soft painterly brushwork with visible texture, "
+        "warm amber light and deep blue shadows, gentle glowing light sources, slightly muted "
+        "nostalgic colours, rich small details, calm and dreamy."
+    ),
+    "storybook": (
+        "Vintage picture-book illustration, traditional hand-painted watercolor and gouache with "
+        "delicate ink outlines and colored pencil details, like an antique European picture book "
+        "from the early 1900s, visible brushstrokes, softly faded pigments, fine paper grain, "
+        "intricate hand-drawn details. Muted forest greens, warm sepia browns, antique gold, dusty "
+        "burgundy and faded cream. Soft amber light, gentle golden window glow, deep natural "
+        "shadows, delicate atmospheric haze. Cozy, intimate, nostalgic, wistful and heartwarming. "
+        "Charming period details, painterly edges, gentle imperfections. Layered foreground and "
+        "background, natural perspective, soft depth, carefully balanced lighting. Full-bleed "
+        "illustration that fills the whole frame, no border, no frame, no paper edges, no signs, "
+        "no lettering."
+    ),
+}
+STYLE_TEXT = STYLE_TEXTS["cozy"]
 STYLE_SUFFIX = (
     " Full vertical composition filled to the bottom with details. "
     "Empty scene, nobody present, no people, no animals, no text, no letters."
@@ -57,13 +73,13 @@ class ImageError(Exception):
     """A background picture could not be generated (the message never contains the token)."""
 
 
-def build_prompt(bg_prompt: str) -> str:
-    return "Scene: " + bg_prompt.strip() + " " + STYLE_TEXT + STYLE_SUFFIX
+def build_prompt(bg_prompt: str, style: str = "cozy") -> str:
+    return "Scene: " + bg_prompt.strip() + " " + STYLE_TEXTS[style] + STYLE_SUFFIX
 
 
-def bg_name(bg_prompt: str, ref: str = "books") -> str:
+def bg_name(bg_prompt: str, ref: str = "books", style: str = "cozy") -> str:
     normalized = " ".join(bg_prompt.split())
-    return "gen-" + hashlib.sha256(f"{normalized}|{ref}".encode("utf-8")).hexdigest()[:12]
+    return "gen-" + hashlib.sha256(f"{normalized}|{ref}|{style}".encode("utf-8")).hexdigest()[:12]
 
 
 def _mentions(bg_prompt: str, words: tuple[str, ...]) -> bool:
@@ -152,19 +168,19 @@ def generate_bg(prompt: str, out_path: Path, account_id: str, token: str, client
 
 
 def get_bg(bg_prompt: str, account_id: str, token: str, client=None, library: Path | None = None,
-           index: int = 0) -> str:
+           index: int = 0, style: str = "cozy") -> str:
     library = Path(library) if library is not None else LIBRARY
     ref = library_ref(bg_prompt, index)
-    name = bg_name(bg_prompt, ref)
+    name = bg_name(bg_prompt, ref, style)
     out = library / f"{name}.jpg"
     if out.is_file():
         return name
     library.mkdir(parents=True, exist_ok=True)
-    full_prompt = build_prompt(bg_prompt)
+    full_prompt = build_prompt(bg_prompt, style)
     generate_bg(full_prompt, out, account_id, token, client,
                 style_ref=STYLE_REFS[ref] if USE_STYLE_REF else None)
     entry = {"file": out.name, "prompt": full_prompt, "model": MODEL, "style_ref": ref,
-             "created": datetime.now().isoformat(timespec="seconds")}
+             "style": style, "created": datetime.now().isoformat(timespec="seconds")}
     with (library / "index.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return name

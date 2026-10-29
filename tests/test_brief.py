@@ -32,6 +32,7 @@ def test_fixture_loads():
     assert brief.slug == "kitchen-table"
     assert brief.title == "Places that stay with us"
     assert brief.cta == "Follow for more"
+    assert brief.style == "cozy"
     assert [s.id for s in brief.scenes] == ["s01-places", "s02-memories", "s03-back"]
     assert [s.pose for s in brief.scenes] == ["wave", "present", "point"]
     assert [s.bg for s in brief.scenes] == ["bg-street", "bg-kitchen", "bg-books"]
@@ -154,3 +155,31 @@ def test_pose_default_is_idle(tmp_path):
     d = good_brief()
     brief = load_brief(write_brief(tmp_path, copy.deepcopy(d)))
     assert brief.scenes[0].pose == "idle"
+
+
+STORYBOOK_FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "brief_storybook.json"
+
+
+def test_style_storybook_is_kept():
+    brief = load_brief(STORYBOOK_FIXTURE)
+    assert brief.style == "storybook"
+    assert [s.id for s in brief.scenes] == ["s01-places", "s02-memories", "s03-back"]
+
+
+def test_unknown_style_falls_back_to_cozy_with_warning(tmp_path, capsys):
+    d = good_brief()
+    d["style"] = "cyberpunk"
+    brief = load_brief(write_brief(tmp_path, d))
+    assert brief.style == "cozy"
+    out = capsys.readouterr().out
+    assert "WARNING" in out
+    assert "cyberpunk" in out
+
+
+def test_unknown_extra_top_level_fields_are_allowed(tmp_path):
+    d = good_brief()
+    d["mood"] = "rainy"
+    d["source"] = "n8n"
+    brief = load_brief(write_brief(tmp_path, d))
+    assert brief.style == "cozy"
+    assert brief.slug == "kitchen-table"

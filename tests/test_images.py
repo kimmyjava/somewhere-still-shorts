@@ -5,8 +5,8 @@ import json
 import httpx
 import pytest
 
-from shorts.images import (STYLE_REFS, STYLE_SUFFIX, STYLE_TEXT, MODEL, ImageError, bg_name,
-                           build_prompt, generate_bg, get_bg, library_ref, pick_style_ref)
+from shorts.images import (STYLE_REFS, STYLE_SUFFIX, STYLE_TEXT, STYLE_TEXTS, MODEL, ImageError,
+                           bg_name, build_prompt, generate_bg, get_bg, library_ref, pick_style_ref)
 
 ACCOUNT = "acct-123"
 TOKEN = "tok-secret-9876"
@@ -40,6 +40,23 @@ def test_build_prompt_scene_first_then_style_then_suffix():
 def test_prompt_mentions_no_reference_image():
     assert "image 0" not in build_prompt(PROMPT)
     assert "nobody present" in STYLE_SUFFIX
+
+
+def test_storybook_style_text_and_prompt():
+    assert STYLE_TEXTS["cozy"] == STYLE_TEXT
+    assert "Vintage picture-book" in STYLE_TEXTS["storybook"]
+    assert "no border" in STYLE_TEXTS["storybook"]
+    prompt = build_prompt(PROMPT, "storybook")
+    assert prompt == "Scene: " + "a rainy street with warm lamps" + " " \
+        + STYLE_TEXTS["storybook"] + STYLE_SUFFIX
+    assert "Vintage picture-book" in prompt
+    assert "no border" in prompt
+
+
+def test_library_hash_differs_per_style():
+    for ref in ("noref", "books", "kitchen", "street"):
+        assert bg_name("the same words", ref, "cozy") != bg_name("the same words", ref, "storybook")
+    assert bg_name("the same words", "noref", "cozy") == bg_name("  the  same words ", "noref", "cozy")
 
 
 def test_bg_name_is_stable_hash():
@@ -116,7 +133,7 @@ def test_top_level_image_fallback(tmp_path):
 def test_get_bg_writes_library_and_index(tmp_path):
     lib = tmp_path / "library"
     name = get_bg(PROMPT, ACCOUNT, TOKEN, client=mock_client(ok_handler), library=lib)
-    assert name == bg_name(PROMPT, "noref")
+    assert name == bg_name(PROMPT, "noref", "cozy")
     assert (lib / f"{name}.jpg").read_bytes() == b"fakejpg-bytes"
     lines = (lib / "index.jsonl").read_text(encoding="utf-8").splitlines()
     entry = json.loads(lines[-1])
@@ -124,7 +141,32 @@ def test_get_bg_writes_library_and_index(tmp_path):
     assert entry["prompt"] == build_prompt(PROMPT)
     assert entry["model"] == MODEL
     assert entry["style_ref"] == "noref"
+    assert entry["style"] == "cozy"
     assert entry["created"]
+
+
+def test_get_bg_storybook_generates_a_separate_picture(tmp_path):
+    calls = []
+
+    def storybook_handler(request):
+        calls.append(1)
+        body = request.read()
+        assert b"Vintage picture-book" in body
+        assert b"no border" in body
+        return httpx.Response(200, json={"result": {"image": FAKE_JPG}, "success": True})
+
+    lib = tmp_path / "library"
+    cozy = get_bg(PROMPT, ACCOUNT, TOKEN, client=mock_client(lambda r: ok_handler(r)), library=lib)
+    story = get_bg(PROMPT, ACCOUNT, TOKEN, client=mock_client(storybook_handler), library=lib,
+                   style="storybook")
+    assert cozy != story
+    assert cozy == bg_name(PROMPT, "noref", "cozy")
+    assert story == bg_name(PROMPT, "noref", "storybook")
+    assert len(calls) == 1
+    assert (lib / f"{cozy}.jpg").is_file() and (lib / f"{story}.jpg").is_file()
+    entries = [json.loads(line) for line in (lib / "index.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [e["style"] for e in entries] == ["cozy", "storybook"]
+    assert entries[1]["prompt"] == build_prompt(PROMPT, "storybook")
 
 
 def test_get_bg_reuses_without_new_http_call(tmp_path):
