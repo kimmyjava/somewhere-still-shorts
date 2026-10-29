@@ -29,6 +29,20 @@ def test_scene_html_contains_bg_path_headline_no_placeholders():
     assert "Fraunces" in html
 
 
+def test_scene_html_cozy_zoom_starts_at_1():
+    html = cozy_scene_html("s01-places", 4.95, "Places stay with us", "bg-street")
+    assert "{scale:1.0," in html
+    assert "{scale:1.08," in html
+
+
+def test_scene_html_storybook_zoom_starts_at_1_06():
+    html = cozy_scene_html("s01-places", 4.95, "Places stay with us", "bg-street", zoom_start=1.06)
+    assert "{scale:1.06," in html
+    assert "{scale:1.14," in html
+    assert "{scale:1.0," not in html
+    assert "{scale:1.08," not in html
+
+
 def test_captions_html_contains_every_word_and_literal_colours():
     html = cozy_captions_html(make_chunks(chunk_words()), 3.0)
     for word in ("The", "kettle", "hums?", "Slowly."):

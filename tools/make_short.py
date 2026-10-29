@@ -82,7 +82,8 @@ def main(argv=None):
     job.mkdir(parents=True, exist_ok=True)
     logs = job / "logs"
     logs.mkdir(exist_ok=True)
-    _log_step(logs, "a-brief", f"slug={brief.slug}\ntitle={brief.title}\nscenes={len(brief.scenes)}")
+    _log_step(logs, "a-brief", f"slug={brief.slug}\ntitle={brief.title}\nstyle={brief.style}\n"
+                               f"scenes={len(brief.scenes)}")
 
     def images():
         account = os.environ.get("CF_ACCOUNT_ID", "")
@@ -93,7 +94,7 @@ def main(argv=None):
         for index, scene in enumerate(brief.scenes):
             name = scene.bg or "bg-books"
             source = "fallback"
-            record = {"bg": name, "source": source}
+            record = {"bg": name, "style": brief.style, "source": source}
             if scene.bg_prompt and not args.no_images:
                 if not (account and token):
                     if not env_warned:
@@ -104,9 +105,9 @@ def main(argv=None):
                 else:
                     hash_ref = library_ref(scene.bg_prompt, index)
                     try:
-                        reused = (LIBRARY / f"{bg_name(scene.bg_prompt, hash_ref)}.jpg").is_file()
-                        name = get_bg(scene.bg_prompt, account, token, index=index)
-                        record = {"bg": name, "source": "reused" if reused else "generated",
+                        reused = (LIBRARY / f"{bg_name(scene.bg_prompt, hash_ref, brief.style)}.jpg").is_file()
+                        name = get_bg(scene.bg_prompt, account, token, index=index, style=brief.style)
+                        record = {"bg": name, "style": brief.style, "source": "reused" if reused else "generated",
                                   "ref": hash_ref if USE_STYLE_REF else None}
                     except ImageError as exc:
                         note = f"scene {scene.id}: background failed ({exc}) - using {name}"
@@ -231,10 +232,12 @@ def main(argv=None):
         kit.write_text(css, encoding="utf-8")
         comp = film / "compositions"
         comp.mkdir(exist_ok=True)
+        zoom_start = 1.06 if brief.style == "storybook" else 1.0
         for scene in brief.scenes:
             dur = next(d for sid, _s, d in times if sid == scene.id)
             (comp / f"{scene.id}.html").write_text(
-                cozy_scene_html(scene.id, dur, scene.headline, picks[scene.id]["bg"]), encoding="utf-8")
+                cozy_scene_html(scene.id, dur, scene.headline, picks[scene.id]["bg"],
+                                zoom_start=zoom_start), encoding="utf-8")
         total = sum(d for _sid, _s, d in times)
         (comp / "m-captions.html").write_text(
             cozy_captions_html(chunks, total), encoding="utf-8")

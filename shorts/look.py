@@ -1,7 +1,9 @@
 """Somewhere Still cozy look v1 - production copy of docs/reference/cozy.py (tested with HyperFrames 0.8.117).
 
-cozy_scene_html(scene_id, dur, headline, bg)      -> one full-screen scene: illustrated background with a slow
-                                                     Ken Burns push, warm vignette, floating light motes, headline.
+cozy_scene_html(scene_id, dur, headline, bg, zoom_start=1.0) -> one full-screen scene: illustrated
+                                                      background with a slow Ken Burns push from
+                                                      zoom_start to zoom_start + 0.08, warm vignette,
+                                                      floating light motes, headline.
 cozy_captions_html(chunks, total)                 -> word-timed captions overlay "m-captions" from CaptionChunk.
 Assets expected in the film folder:
   assets/bg/<name>.jpg                (vertical illustrations, about 9:16)
@@ -22,7 +24,8 @@ MOTES = [(12, 30, 10, 0.0), (78, 22, 7, 0.7), (64, 48, 9, 1.3), (30, 58, 6, 0.4)
          (46, 36, 5, 2.4), (20, 74, 7, 1.1), (70, 80, 6, 0.2)]
 
 
-def cozy_scene_html(sid, dur, headline, bg, push=1.08):
+def cozy_scene_html(sid, dur, headline, bg, zoom_start=1.0):
+    push = round(zoom_start + 0.08, 2)
     motes = "".join(
         f'  <div id="{sid}-m{i}" class="{sid}-mote" style="left:{x}%; top:{y}%; width:{s}px; height:{s}px;"></div>\n'
         for i, (x, y, s, _) in enumerate(MOTES))
@@ -54,7 +57,7 @@ def cozy_scene_html(sid, dur, headline, bg, push=1.08):
 (function () {{
   var D = {dur}; var tl = gsap.timeline({{ paused: true }});
   // slow Ken Burns push across the whole scene
-  tl.fromTo('#{sid}-bg', {{scale:1.0, x:0}}, {{scale:{push}, x:-18, duration:D, ease:'none'}}, 0);
+  tl.fromTo('#{sid}-bg', {{scale:{zoom_start}, x:0}}, {{scale:{push}, x:-18, duration:D, ease:'none'}}, 0);
   // soft fade in from night, soft fade out to night (scene-to-scene dip)
   tl.fromTo('#{sid}-veil', {{opacity:1}}, {{opacity:0, duration:0.6, ease:'sine.out'}}, 0);
   tl.fromTo('#{sid}-veil', {{opacity:0}}, {{opacity:1, duration:0.45, ease:'sine.in', immediateRender:false}}, D - 0.45);
