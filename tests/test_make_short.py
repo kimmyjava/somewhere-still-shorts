@@ -153,6 +153,8 @@ def test_make_short_flow_writes_files_in_order(env):
 
     assert (job / "vo.wav").is_file()
     assert (job / "words.json").is_file()
+    assert json.loads((job / "timing" / "alignment.json").read_text(encoding="utf-8")) \
+        == {"alignment": "whisper"}
     srt = (job / "captions.srt").read_text(encoding="utf-8")
     assert srt.startswith("1\n00:00:00,000 --> ")
 
@@ -219,6 +221,58 @@ def test_presenter_track_mirror_is_empty(env):
     job = run_main(env, "--no-render")
     track = json.loads((job / "film" / "src" / "presenter-track.json").read_text(encoding="utf-8"))
     assert track["mirror"] == []
+
+
+def test_align_failure_falls_back_to_proportional_timing(env, monkeypatch):
+    def boom(script_text, whisper_words):
+        raise ValueError("whisper exploded")
+
+    monkeypatch.setattr(make_short, "align", boom)
+    job = run_main(env, "--no-render")
+
+    record = json.loads((job / "timing" / "alignment.json").read_text(encoding="utf-8"))
+    assert record == {"alignment": "fallback"}
+    log = (job / "logs" / "d-timing.log").read_text(encoding="utf-8")
+    assert "alignment=fallback" in log
+
+    words = json.loads((job / "words.json").read_text(encoding="utf-8"))
+    brief = load_brief(env["brief"])
+    assert [w["text"] for w in words] == full_narration(brief).split()
+
+    durations = []
+    for scene in brief.scenes:
+        with wave.open(str(job / "voice" / f"{scene.id}.wav"), "rb") as w:
+            durations.append(w.getnframes() / w.getframerate())
+    total = sum(durations) + 0.35 * (len(brief.scenes) - 1)
+    assert words[0]["start"] == pytest.approx(0.0)
+    assert words[-1]["end"] == pytest.approx(total)
+
+    # each scene's words sit inside its own part's window, in script order
+    idx = 0
+    start = 0.0
+    for scene, dur in zip(brief.scenes, durations):
+        count = len(scene.narration.split())
+        scene_words = words[idx:idx + count]
+        assert [w["text"] for w in scene_words] == scene.narration.split()
+        for w in scene_words:
+            assert start - 1e-9 <= w["start"] < w["end"] <= start + dur + 1e-9
+        idx += count
+        start += dur + 0.35
+
+    # the pipeline continued to captions and the film scaffold as usual
+    assert (job / "captions.srt").is_file()
+    assert (job / "film" / "compositions" / "m-captions.html").is_file()
+    assert json.loads((job / "film" / "film.json").read_text(encoding="utf-8"))["scenes"]
+
+
+def test_align_failure_reason_is_logged(env, monkeypatch, capsys):
+    def boom(script_text, whisper_words):
+        raise ValueError("whisper exploded")
+
+    monkeypatch.setattr(make_short, "align", boom)
+    run_main(env, "--no-render")
+    out = capsys.readouterr().out
+    assert "WARNING: word alignment failed (whisper exploded)" in out
 
 
 def test_storybook_style_zooms_from_1_06(env_factory):

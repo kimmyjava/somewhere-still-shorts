@@ -4,10 +4,16 @@ import logging
 import re
 import subprocess
 import sys
+import wave
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
+
+from shorts.tts.join import PAUSE_S
+
+if TYPE_CHECKING:
+    from shorts.brief import Brief
 
 TRANSCRIBE_SCRIPT = (
     Path(__file__).resolve().parents[1]
@@ -44,19 +50,19 @@ def load_whisper_words(path: Path) -> list[dict]:
     return [w for seg in data for w in seg["words"]]
 
 
-def _number_to_words(n: int) -> list[str]:
-    """Self-written number-to-words for integers 0..9999: 1500 -> one thousand five hundred."""
-    if not 0 <= n <= 9999:
-        raise ValueError(f"number out of range: {n}")
-    if n == 0:
-        return ["zero"]
+_MAX_INT = 999_999_999_999
+_SCALES = ((1_000_000_000, "billion"), (1_000_000, "million"), (1_000, "thousand"))
+_SUFFIX_MULT = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
+_NUM_TOKEN_RE = re.compile(r"^\d{1,3}(,\d{3})*(\.\d+)?[kmb]?$")
+_PLURAL_RE = re.compile(r"^(\d{4})s$")
+
+
+def _hundreds_to_words(n: int) -> list[str]:
+    """1..999 as words (empty for 0)."""
     out: list[str] = []
-    if n >= 1000:
-        out += [_ONES_LIST[n // 1000], "thousand"]
-    n %= 1000
     if n >= 100:
         out += [_ONES_LIST[n // 100], "hundred"]
-    n %= 100
+        n %= 100
     if n >= 20:
         out.append(_TENS_LIST[n // 10])
         if n % 10:
@@ -66,6 +72,61 @@ def _number_to_words(n: int) -> list[str]:
     elif n > 0:
         out.append(_ONES_LIST[n])
     return out
+
+
+def _int_to_words(n: int) -> list[str] | None:
+    """Words for 0..999,999,999,999, or None when out of range."""
+    if not 0 <= n <= _MAX_INT:
+        return None
+    if n == 0:
+        return ["zero"]
+    out: list[str] = []
+    for value, name in _SCALES:
+        if n >= value:
+            out += _hundreds_to_words(n // value) + [name]
+            n %= value
+    if n:
+        out += _hundreds_to_words(n)
+    return out
+
+
+def _number_to_words(token) -> list[str]:
+    """Words for a number-ish token: 26000, "26,000", "26k", "1.5", "1500s".
+
+    Accepts an int or str. It NEVER raises: anything it cannot convert comes
+    back unchanged as a single word (or nothing at all for pure punctuation).
+    """
+    raw = token if isinstance(token, str) else str(token)
+    text = raw.strip().lower()
+    if _NUM_TOKEN_RE.match(text):
+        mult = _SUFFIX_MULT.get(text[-1], 1)
+        digits = (text[:-1] if mult > 1 else text).replace(",", "")
+        if "." in digits and mult > 1:
+            words = _int_to_words(int(round(float(digits) * mult)))
+            return words if words is not None else [raw]
+        if "." in digits:
+            whole, _, frac = digits.partition(".")
+            whole_words = _int_to_words(int(whole))
+            if whole_words is None:
+                return [raw]
+            return whole_words + ["point"] + [
+                "zero" if d == "0" else _ONES_LIST[int(d)] for d in frac]
+        words = _int_to_words(int(digits) * mult)
+        return words if words is not None else [raw]
+    if _PLURAL_RE.match(text):
+        n = int(text[:-1].replace(",", ""))
+        if 1000 <= n <= 9999 and n % 100 == 0:
+            return _hundreds_to_words(n // 100) + ["hundreds"]
+        words = _int_to_words(n)
+        if words is None:
+            return [raw]
+        return words + ["s"]
+    plain = re.sub(r"[^\w]", "", raw.strip())
+    if plain.isdecimal():
+        words = _int_to_words(int(plain))
+        if words is not None:
+            return words
+    return [plain] if plain else []
 
 
 def _parse_number_words(words: Sequence[str], i: int) -> tuple[int, int] | None:
@@ -106,12 +167,15 @@ def _parse_number_words(words: Sequence[str], i: int) -> tuple[int, int] | None:
 
 
 def _merge_digit_fragments(toks: list[tuple[int, str]]) -> list[tuple[int, int, str]]:
-    """Join Whisper's split numbers like '1' + ',500' back into '1500', keeping index ranges."""
+    """Join Whisper's split numbers like '1' + ',500' or '1' + '.5', keeping index ranges."""
     out: list[tuple[int, int, str]] = []
     for idx, t in toks:
         if t.startswith(",") and out and re.fullmatch(r"\d{1,3}(,\d{3})*", out[-1][2]):
             first, _, prev = out[-1]
             out[-1] = (first, idx, prev.replace(",", "") + t[1:].replace(",", ""))
+        elif t.startswith(".") and out and re.fullmatch(r"\d{1,3}(,\d{3})*", out[-1][2]):
+            first, _, prev = out[-1]
+            out[-1] = (first, idx, prev + t)
         else:
             out.append((idx, idx, t))
     return out
@@ -122,8 +186,8 @@ def _canonical(tokens: Sequence[str]) -> tuple[list[str], list[tuple[int, int]]]
 
     Returns (canonical_words, spans) where spans[k] is the (first, last) index
     of the input tokens behind canonical_words[k]. Lowercase, punctuation
-    removed, hyphens split, and every number (digits with commas or spelled
-    words) mapped to the same full-form words.
+    removed, hyphens split, and every number (digits with commas or decimals,
+    k/m/b suffixes, spelled words) mapped to the same full-form words.
     """
     toks = _merge_digit_fragments(
         [(i, str(t).strip()) for i, t in enumerate(tokens) if str(t).strip()]
@@ -133,11 +197,7 @@ def _canonical(tokens: Sequence[str]) -> tuple[list[str], list[tuple[int, int]]]
     atom_last: list[int] = []
     for first, last, t in toks:
         for part in re.split(r"[-\u2013\u2014]", t):
-            p = re.sub(r"[^\w]", "", part.lower())
-            if not p:
-                continue
-            expanded = _number_to_words(int(p)) if p.isdigit() else [p]
-            for w in expanded:
+            for w in _number_to_words(part.lower()):
                 atom_words.append(w)
                 atom_first.append(first)
                 atom_last.append(last)
@@ -225,6 +285,31 @@ def align(script_text: str, whisper_words: list[dict]) -> list[TimedWord]:
             out.append(TimedWord(script_words[k], prev_end + step * (k - i + 1), prev_end + step * (k - i + 2)))
         prev_end = next_start
         i = j
+    return out
+
+
+def fallback_timed_words(brief: "Brief", voice_dir: Path) -> list[TimedWord]:
+    """Proportional times when alignment fails, so a video never dies on timing.
+
+    Each scene's script words are spread over its own voice part
+    <voice_dir>/<scene_id>.wav (duration via the wave module), in proportion to
+    word length, with the 0.35 s join pauses between scenes. The last word ends
+    at the total joined narration duration.
+    """
+    out: list[TimedWord] = []
+    t = 0.0
+    for i, scene in enumerate(brief.scenes):
+        if i:
+            t += PAUSE_S
+        with wave.open(str(Path(voice_dir) / f"{scene.id}.wav"), "rb") as w:
+            dur = w.getnframes() / w.getframerate()
+        words = scene.narration.split()
+        weights = [max(len(word), 1) for word in words]
+        total = sum(weights)
+        for word, weight in zip(words, weights):
+            span = dur * weight / total
+            out.append(TimedWord(word, t, t + span))
+            t += span
     return out
 
 

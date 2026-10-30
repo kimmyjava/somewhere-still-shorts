@@ -29,7 +29,7 @@ from shorts.images import (ImageError, LIBRARY, MODEL, USE_STYLE_REF, bg_name, g
 from shorts.look import PALETTE, cozy_captions_html, cozy_scene_html
 from shorts.music import mix_command, pick_track
 from shorts.runner import StepError, run
-from shorts.timing import align, load_whisper_words, transcribe
+from shorts.timing import align, fallback_timed_words, load_whisper_words, transcribe
 from shorts.tts.base import VoiceSpec
 from shorts.tts.join import join_parts
 from shorts.tts.voicebox import VoiceboxTTS
@@ -157,8 +157,17 @@ def main(argv=None):
     _log_step(logs, "c-voice", _timed("c-voice", voice))
 
     def timing():
-        flat = load_whisper_words(transcribe(vo, job / "timing"))
-        timed_words = align(full_narration(brief), flat)
+        alignment = "whisper"
+        try:
+            flat = load_whisper_words(transcribe(vo, job / "timing"))
+            timed_words = align(full_narration(brief), flat)
+        except Exception as exc:
+            alignment = "fallback"
+            note = f"word alignment failed ({exc}) - using proportional timing from the voice parts"
+            print(f"WARNING: {note}", flush=True)
+            timed_words = fallback_timed_words(brief, job / "voice")
+        (job / "timing" / "alignment.json").write_text(
+            json.dumps({"alignment": alignment}), encoding="utf-8")
         chunks = make_chunks(timed_words)
         (job / "words.json").write_text(
             json.dumps([asdict(w) for w in timed_words], ensure_ascii=False), encoding="utf-8")
@@ -168,7 +177,9 @@ def main(argv=None):
              "-of", "default=noprint_wrappers=1:nokey=1", str(vo)],
             cwd=job, log_path=logs / "d-ffprobe.log")
         voice_dur = float(probe.strip().splitlines()[-1])
-        _log_step(logs, "d-timing", f"words={len(timed_words)} chunks={len(chunks)} voice={voice_dur:.2f}s")
+        _log_step(logs, "d-timing",
+                  f"alignment={alignment} words={len(timed_words)} chunks={len(chunks)} "
+                  f"voice={voice_dur:.2f}s")
         return timed_words, chunks, voice_dur
 
     timed_words, chunks, voice_dur = _timed("d-timing", timing)
