@@ -1,16 +1,19 @@
 """Fast timing tests on the real rain fixture (no Whisper run)."""
 import logging
 import sys
+import wave
 from pathlib import Path
 
 import pytest
 
+from shorts.brief import Brief, Scene
 from shorts.timing import (
     AlignmentError,
     _canonical,
     _number_to_words,
     _parse_number_words,
     align,
+    fallback_timed_words,
     load_whisper_words,
     transcribe,
 )
@@ -71,8 +74,49 @@ def test_number_to_words_small_integers():
     assert _number_to_words(1903) == ["one", "thousand", "nine", "hundred", "three"]
     assert _number_to_words(9999) == ["nine", "thousand", "nine", "hundred", "ninety", "nine"]
     assert _number_to_words(0) == ["zero"]
-    with pytest.raises(ValueError):
-        _number_to_words(10000)
+    assert _number_to_words(10_000) == ["ten", "thousand"]
+
+
+def test_number_to_words_thousands_millions_billions():
+    assert _number_to_words(26_000) == ["twenty", "six", "thousand"]
+    assert _number_to_words(2026) == ["two", "thousand", "twenty", "six"]
+    assert _number_to_words(1_000_000) == ["one", "million"]
+    assert _number_to_words(123_456_789) == [
+        "one", "hundred", "twenty", "three", "million",
+        "four", "hundred", "fifty", "six", "thousand",
+        "seven", "hundred", "eighty", "nine"]
+    assert _number_to_words(999_999_999_999) == [
+        "nine", "hundred", "ninety", "nine", "billion",
+        "nine", "hundred", "ninety", "nine", "million",
+        "nine", "hundred", "ninety", "nine", "thousand",
+        "nine", "hundred", "ninety", "nine"]
+
+
+def test_number_to_words_token_forms():
+    assert _number_to_words("26,000") == ["twenty", "six", "thousand"]
+    assert _number_to_words("26k") == ["twenty", "six", "thousand"]
+    assert _number_to_words("1.5") == ["one", "point", "five"]
+    assert _number_to_words("1500s") == ["fifteen", "hundreds"]
+    assert _number_to_words("0.5") == ["zero", "point", "five"]
+    assert _number_to_words("2m") == ["two", "million"]
+    assert _number_to_words("1,500") == ["one", "thousand", "five", "hundred"]
+
+
+def test_number_to_words_garbage_comes_back_unchanged_and_never_raises():
+    for token in ("hello", "x26", "2026th", "Cozy", "1,000,000,000,000"):
+        assert _number_to_words(token) == [token], token
+    assert _number_to_words(1_000_000_000_000) == ["1000000000000"]
+    assert _number_to_words("") == []
+    assert _number_to_words("!!!") == []
+    for token in ("...", "it's", "2,5", "12.34.56", "-273", "26ks", None, 3.14, 10 ** 30, "²", "٢٠٢٦"):
+        _number_to_words(token)  # must not raise
+
+
+def test_canonical_maps_26k_commas_and_spelled_alike():
+    k_form, _ = _canonical(["26k"])
+    comma_form, _ = _canonical(["26,000"])
+    spelled, _ = _canonical("twenty-six thousand".split())
+    assert k_form == comma_form == spelled == ["twenty", "six", "thousand"]
 
 
 def test_year_form_and_full_form_parse_to_same_value():
@@ -210,3 +254,39 @@ def test_transcribe_runs_vendor_script_with_same_python(tmp_path, monkeypatch):
     assert cmd[6:8] == ["--model", "medium"]
     assert out == tmp_path / "timing" / "vo-words.json"
     assert out.exists()
+
+
+def _write_part(path: Path, seconds: float, rate: int = 24000) -> None:
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x00" * (int(round(rate * seconds)) * 2))
+
+
+def test_fallback_timed_words_cover_each_part_in_order_and_end_at_total(tmp_path):
+    brief = Brief(slug="x", title="x", scenes=[
+        Scene(id="s01-a", narration="one two three four five", headline=""),
+        Scene(id="s02-b", narration="six seven", headline=""),
+    ])
+    _write_part(tmp_path / "s01-a.wav", 0.1)
+    _write_part(tmp_path / "s02-b.wav", 0.05)
+
+    words = fallback_timed_words(brief, tmp_path)
+
+    assert [w.text for w in words] == \
+        brief.scenes[0].narration.split() + brief.scenes[1].narration.split()
+    total = 0.1 + 0.35 + 0.05
+    assert words[0].start == pytest.approx(0.0)
+    assert words[-1].end == pytest.approx(total)
+    # scene 1's words fill exactly its part, scene 2's start after the pause
+    for w in words[:5]:
+        assert w.start >= 0.0 and w.end <= 0.1 + 1e-9
+    for w in words[5:]:
+        assert w.start >= 0.45 - 1e-9 and w.end <= total + 1e-9
+    # proportional to word length: "three" (5 chars) lasts longer than "one" (3)
+    one = words[0]
+    three = words[2]
+    assert (three.end - three.start) > (one.end - one.start)
+    # monotonic, never backwards
+    assert all(a.end <= b.start + 1e-9 for a, b in zip(words, words[1:]))
