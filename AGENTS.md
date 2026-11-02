@@ -76,6 +76,18 @@ Server: plain Linux shell (BusyBox tools); paths as written above.
 - n8n workflow "Somewhere Still - Make a Short (core)" posts briefs to
   http://192.168.8.184:8787/jobs with the "Shorts gateway key" credential.
   n8n's SSRF allowlist must include 192.168.8.184/32 (N8N_SSRF_ALLOWED_IP_RANGES).
+- n8n executions debugging (verified 2026-11-02):
+  - Test/MCP-triggered webhook runs ARE saved and listed by the API (mode "webhook"/
+    "manual"). If executions seem missing, the usual cause is that the probe workflow
+    was deleted first: deleting a workflow cascade-deletes its executions. Inspect
+    executions BEFORE deleting any test workflow.
+  - n8n_test_workflow method "trigger" fires the PRODUCTION webhook URL, so the
+    workflow must be active - and activation registers the webhook asynchronously.
+    The first fire right after activation can 404 ("webhook not registered") while
+    the tool still reports success:true; wait a few seconds after activating and
+    check the response body before trusting "success".
+  - Manual editor runs save per workflow setting "Save manual executions" (default
+    on in this instance; env EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS).
 
 ## Planned layout
 shorts/brief.py     shorts/tts/        shorts/timing.py   shorts/captions.py
