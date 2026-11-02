@@ -20,10 +20,25 @@
 - --redo-scene <scene_id> (repeatable) deletes only that scene's cached part and regenerates it
   with seed + 1 (a different take), then rejoins vo.wav and reruns timing, film and render.
 
+### Server voice (2026-11)
+- TrueNAS Voicebox Docker v0.6.0, reached via SHORTS_VOICEBOX_URL (host-local, never exposed).
+- Profile: kokoro preset "Heart", id 65c29b06-04b5-4df7-8af9-2e44c2239630, engine "kokoro",
+  model_size must be null (kokoro has no size axis). Env-driven: SHORTS_VOICEBOX_URL,
+  SHORTS_VOICE_PROFILE_ID, SHORTS_VOICE_ENGINE, SHORTS_VOICE_MODEL_SIZE (server values in
+  /workspace/shorts-data/env.sh); unset falls back to the laptop's Kim/qwen values above.
+- The cloned "Kim" profile exists only on the laptop; importing it to the server is a later
+  env-only change (kokoro may not accept cloned profiles - test before switching).
+
 ## Word timings (tested 2026-10-16)
-- vendor KAPE scripts/transcribe.py, faster-whisper "medium", --lang en.
+- Laptop: vendor KAPE scripts/transcribe.py, faster-whisper "medium", --lang en.
 - 17.4 s audio transcribed in 13 s. All words correct.
 - REQUIRES av==18.1.0 (av 19 breaks faster-whisper 1.2.1: unexpected 'metadata_errors').
+- Off-Windows (2026-11): faster-whisper is not installable on musl (no ctranslate2/
+  onnxruntime/torch wheels), so shorts/timing.py dispatches on platform: win32 keeps the
+  vendor script untouched; everywhere else transcribe_hyperframes() runs whisper.cpp
+  through the pinned npx hyperframes@0.8.117 CLI (SHORTS_WHISPER_MODEL, default small.en;
+  model cached in /config/.cache/hyperframes on the server). Validated on the server
+  2026-11-02: word timings land correctly end-to-end (alignment: "whisper").
 
 ## Rendering (tested 2026-10-16)
 - HyperFrames 0.8.117, hardware GPU path works (Intel Iris Xe).
@@ -81,6 +96,21 @@
   posts briefs to http://192.168.8.184:8787/jobs. SHORTS_API_KEY lives in
   /config/opencode/shorts-gateway.env (chmod 600, outside the repo); source it plus
   /workspace/shorts-data/env.sh before starting. Gateway health: /health (no key needed).
+
+## Server validation (2026-11-02)
+- First full end-to-end run on the TrueNAS server, driven by n8n: topic -> Groq script ->
+  Gemini brief -> validation -> gateway job -> render -> Telegram delivery. Job
+  bakery-cat-quiet-20261102-092827: done in ~4 min, 1080x1920 h264, 33.6 s, 5 scenes,
+  kokoro "Heart" voice, whisper.cpp timings.
+- Expected gaps on the server: no CF_ACCOUNT_ID/CF_API_TOKEN yet (images.json shows
+  source: "fallback", fixed backgrounds used) and no music library yet (video ships
+  without music). Both degrade gracefully by design.
+- n8n (self-hosted, same host) is rewired to the server gateway: all five HTTP nodes use
+  http://192.168.8.184:8787, credential "Shorts gateway key" (X-API-Key) on the four job
+  routes; n8n's SSRF allowlist needs 192.168.8.184/32 (N8N_SSRF_ALLOWED_IP_RANGES).
+  Pre-rewire backup: /workspace/shorts-data/tmp/workflow-backup-6OJOrTk7H5gvZpJp.json.
+- Gateway restart after any opencode container restart/recreate:
+  docker exec opencode sh /workspace/shorts-data/start-gateway.sh
 
 ## Not decided yet
 - Final colours and fonts. Scene template list for the cozy style.
