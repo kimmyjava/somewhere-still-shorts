@@ -1,6 +1,6 @@
 """Start the local job gateway. Binds 127.0.0.1 ONLY - expose via a Cloudflare Tunnel, never 0.0.0.0.
 
-usage: C:/shorts/venv/Scripts/python tools/gateway.py [--jobs-root C:/shorts/jobs] [--port 8787]
+usage: python tools/gateway.py [--jobs-root <dir>] [--port 8787]
 Needs SHORTS_API_KEY (>= 32 chars) in the environment.
 """
 import argparse
@@ -17,10 +17,11 @@ from shorts.gateway.app import create_app
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Run the shorts-worker job gateway on 127.0.0.1 only.")
-    ap.add_argument("--jobs-root", default="C:/shorts/jobs", help="folder for all job output")
+    ap.add_argument("--jobs-root", default=None, help="folder for all job output (default: SHORTS_DATA_ROOT/jobs)")
     ap.add_argument("--port", type=int, default=8787)
     args = ap.parse_args()
-    uvicorn.run(create_app(jobs_root=Path(args.jobs_root)), host="127.0.0.1", port=args.port)
+    jobs_root = Path(args.jobs_root) if args.jobs_root else None
+    uvicorn.run(create_app(jobs_root=jobs_root), host="127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":

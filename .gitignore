@@ -10,3 +10,4 @@ snapshots/
 *.mp3
 *.mp4
 !tests/fixtures/*.wav
+.venv/

@@ -1,9 +1,16 @@
-"""Local Voicebox v0.5.0 client (http://127.0.0.1:17493 - never expose it).
+"""Local Voicebox client (default http://127.0.0.1:17493 - never expose it).
 
-Flow per docs/decisions.md: POST /generate, poll GET /history/{id} until
-completed/failed, then GET /audio/{id} (WAV). Engine is always sent explicitly.
+Flow: POST /generate, poll GET /history/{id} until completed/failed, then
+GET /audio/{id} (WAV). Engine is always sent explicitly.
+
+Server override (TrueNAS): SHORTS_VOICEBOX_URL moves the endpoint (the laptop
+default stays 127.0.0.1:17493), SHORTS_VOICE_PROFILE_ID picks the profile
+(cloned voice on the laptop, a preset such as kokoro "Heart" on the server) and
+SHORTS_VOICE_ENGINE / SHORTS_VOICE_MODEL_SIZE override the engine pair (the
+server's kokoro preset needs engine="kokoro", model_size=None).
 """
 import io
+import os
 import time
 import wave
 from pathlib import Path
@@ -15,6 +22,19 @@ from shorts.tts.base import TTSResult, VoiceSpec
 DEFAULT_BASE_URL = "http://127.0.0.1:17493"
 
 
+def env_base_url() -> str:
+    return os.environ.get("SHORTS_VOICEBOX_URL", "").strip() or DEFAULT_BASE_URL
+
+
+def env_engine() -> str:
+    return os.environ.get("SHORTS_VOICE_ENGINE", "").strip() or "qwen"
+
+
+def env_model_size() -> str | None:
+    raw = os.environ.get("SHORTS_VOICE_MODEL_SIZE", "").strip()
+    return raw or None
+
+
 class VoiceboxError(Exception):
     """A Voicebox generation failed or timed out."""
 
@@ -22,12 +42,12 @@ class VoiceboxError(Exception):
 class VoiceboxTTS:
     def __init__(
         self,
-        base_url: str = DEFAULT_BASE_URL,
+        base_url: str | None = None,
         poll_every: float = 3.0,
         timeout_s: float = 1800.0,
         client: httpx.Client | None = None,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
+        self._base_url = (base_url or env_base_url()).rstrip("/")
         self._poll_every = poll_every
         self._timeout_s = timeout_s
         self._client = client or httpx.Client(base_url=self._base_url, timeout=30.0)
@@ -91,7 +111,6 @@ class VoiceboxTTS:
             seconds_taken=time.monotonic() - started,
             engine=voice.engine,
         )
-
 
 def _wav_seconds(data: bytes) -> float:
     try:

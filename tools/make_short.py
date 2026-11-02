@@ -1,11 +1,13 @@
 """One command from brief.json to a rendered vertical Short (needs Voicebox, Whisper, node).
 
-usage: C:/shorts/venv/Scripts/python tools/make_short.py --brief brief.json [--jobs-root C:/shorts/jobs]
-       [--fps 30] [--quality draft] [--no-images] [--no-render] [--redo-voice]
+usage: python tools/make_short.py --brief brief.json [--jobs-root <dir>] [--fps 30]
+       [--quality draft] [--no-images] [--no-render] [--redo-voice]
        [--redo-scene SCENE_ID ...]
 Per-step logs: <jobs-root>/<slug>/logs/<step>.log. Final video: <jobs-root>/<slug>/<slug>.mp4.
-AI backgrounds need CF_ACCOUNT_ID and CF_API_TOKEN in the environment; without them (or with
---no-images, or when a picture fails) scenes fall back to their fixed bg and the job still runs.
+Defaults come from SHORTS_DATA_ROOT (jobs/, music/ under it) so the same command runs on the
+laptop (C:/shorts) and the server (/workspace/shorts-data). AI backgrounds need CF_ACCOUNT_ID and
+CF_API_TOKEN in the environment; without them (or with --no-images, or when a picture fails)
+scenes fall back to their fixed bg and the job still runs.
 """
 import argparse
 import json
@@ -24,7 +26,7 @@ sys.path.insert(0, str(REPO))
 from shorts.brief import full_narration, load_brief
 from shorts.captions import make_chunks, write_srt
 from shorts.film import film_updates, presenter_poses, scene_times
-from shorts.images import (ImageError, LIBRARY, MODEL, USE_STYLE_REF, bg_name, get_bg,
+from shorts.images import (ImageError, LIBRARY, MODEL, USE_STYLE_REF, bg_name, data_root, get_bg,
                            library_ref)
 from shorts.look import PALETTE, cozy_captions_html, cozy_scene_html
 from shorts.music import mix_command, pick_track
@@ -32,12 +34,17 @@ from shorts.runner import StepError, run
 from shorts.timing import align, fallback_timed_words, load_whisper_words, transcribe
 from shorts.tts.base import VoiceSpec
 from shorts.tts.join import join_parts
-from shorts.tts.voicebox import VoiceboxTTS
+from shorts.tts.voicebox import VoiceboxTTS, env_base_url, env_engine, env_model_size
 
 DEFAULT_PROFILE_ID = "ac52122c-5b02-4c66-b00d-ba5bb47b65f7"
 SEED = 42
 KAPE = REPO / "vendor" / "kape-explainer" / "skills" / "kape-explainer"
 ENGINE = REPO / "vendor" / "kape-explainer" / "skills" / "spatial-film"
+
+
+def voice_profile_id() -> str:
+    """The Voicebox profile to speak with (cloned "Kim" by default; server presets override)."""
+    return os.environ.get("SHORTS_VOICE_PROFILE_ID", "").strip() or DEFAULT_PROFILE_ID
 
 
 def _log_step(logs: Path, name: str, text: str) -> None:
@@ -62,7 +69,7 @@ def main(argv=None):
     t_all = time.monotonic()
     ap = argparse.ArgumentParser(description="Build a Somewhere Still Short from a brief.")
     ap.add_argument("--brief", required=True, help="path to the brief JSON")
-    ap.add_argument("--jobs-root", default="C:/shorts/jobs", help="folder for all job output")
+    ap.add_argument("--jobs-root", default=str(data_root() / "jobs"), help="folder for all job output")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--quality", default="draft")
     ap.add_argument("--no-images", action="store_true",
@@ -73,7 +80,7 @@ def main(argv=None):
     ap.add_argument("--redo-scene", action="append", default=[], metavar="SCENE_ID",
                     dest="redo_scenes",
                     help="regenerate one scene's voice part with seed + 1 (a different take); repeatable")
-    ap.add_argument("--music-dir", default="C:/shorts/music", help="folder with <mood>-NN.mp3 tracks")
+    ap.add_argument("--music-dir", default=str(data_root() / "music"), help="folder with <mood>-NN.mp3 tracks")
     ap.add_argument("--no-music", action="store_true", help="skip the music mix")
     args = ap.parse_args(argv)
 
@@ -143,11 +150,15 @@ def main(argv=None):
         if todo:
             tts = VoiceboxTTS()
             if not tts.health():
-                raise StepError("Open the Voicebox app first")
+                raise StepError(f"Voicebox is not healthy at {env_base_url()} - start it first")
+            engine = env_engine()
+            model_size = env_model_size()
+            profile = voice_profile_id()
             for scene in todo:
                 seed = SEED + 1 if scene.id in redo else SEED
                 result = tts.synthesize(
-                    scene.narration, VoiceSpec(profile_id=DEFAULT_PROFILE_ID, seed=seed),
+                    scene.narration,
+                    VoiceSpec(profile_id=profile, seed=seed, engine=engine, model_size=model_size),
                     voice_dir / f"{scene.id}.wav")
                 notes.append(f"{scene.id} {result.duration_s:.2f}s seed={seed}")
         seconds = join_parts(parts, vo)
@@ -201,6 +212,26 @@ def main(argv=None):
             cwd=job, log_path=logs / "f-scaffold.log", timeout_s=900)
 
     _timed("f-scaffold", scaffold)
+
+    def sfx():
+        """KAPE's assemble.py exits when a film.json SFX file is missing. Our films ship cues=[]
+        (no SFX is ever mixed), so a silent placeholder keeps the builder happy without audio impact."""
+        sfx_dir = film / "assets" / "audio" / "sfx"
+        film_json = json.loads((film / "film.json").read_text(encoding="utf-8"))
+        needed = sorted({file_name for file_name, _vol in film_json.get("sfx", {}).values()})
+        made = 0
+        for name in needed:
+            path = sfx_dir / name
+            if path.is_file():
+                continue
+            sfx_dir.mkdir(parents=True, exist_ok=True)
+            run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono",
+                 "-t", "0.3", "-c:a", "libmp3lame", "-q:a", "9", str(path)],
+                cwd=film, log_path=logs / "f-sfx.log", timeout_s=120)
+            made += 1
+        return f"{made} silent placeholder(s) for missing sfx"
+
+    _timed("f-sfx", sfx)
 
     def fill():
         run(["ffmpeg", "-v", "error", "-y", "-i", "assets/audio/vo.mp3",

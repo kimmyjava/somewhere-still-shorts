@@ -19,9 +19,15 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from shorts.brief import BriefError, load_brief
+from shorts.images import data_root
 from shorts.runner import StepError, run
 
-VOICEBOX_ROOT = "http://127.0.0.1:17493/"
+
+def voicebox_root() -> str:
+    return (os.environ.get("SHORTS_VOICEBOX_URL", "").strip()
+            or "http://127.0.0.1:17493/").rstrip("/") + "/"
+
+
 JOB_ID_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 MAX_BODY = 65536
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -31,7 +37,7 @@ JOB_TIMEOUT_S = 14400
 def voicebox_up() -> bool:
     try:
         with httpx.Client(timeout=2.0) as client:
-            r = client.get(VOICEBOX_ROOT)
+            r = client.get(voicebox_root())
         return r.status_code == 200
     except httpx.HTTPError:
         return False
@@ -53,12 +59,12 @@ def _write_status(job_dir: Path, **fields) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def create_app(jobs_root=Path("C:/shorts/jobs")) -> FastAPI:
+def create_app(jobs_root=None) -> FastAPI:
     key = os.environ.get("SHORTS_API_KEY", "")
     if len(key) < 32:
         raise RuntimeError(
             "SHORTS_API_KEY is missing or shorter than 32 characters - refusing to start the gateway")
-    jobs_root = Path(jobs_root)
+    jobs_root = Path(jobs_root) if jobs_root is not None else data_root() / "jobs"
     jobs_root.mkdir(parents=True, exist_ok=True)
 
     for status_path in jobs_root.glob("*/status.json"):

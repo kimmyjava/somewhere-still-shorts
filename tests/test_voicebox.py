@@ -89,6 +89,25 @@ def test_health_false_on_connection_error():
     assert make_tts(handler).health() is False
 
 
+def test_env_overrides_base_url_engine_and_model(monkeypatch):
+    monkeypatch.setenv("SHORTS_VOICEBOX_URL", "http://192.168.8.184:17493/")
+    monkeypatch.setenv("SHORTS_VOICE_ENGINE", "kokoro")
+    monkeypatch.setenv("SHORTS_VOICE_MODEL_SIZE", "")
+    from shorts.tts.voicebox import env_base_url, env_engine, env_model_size
+
+    assert env_base_url() == "http://192.168.8.184:17493/"
+    assert env_engine() == "kokoro"
+    assert env_model_size() is None
+    # explicit constructor argument still wins over the environment
+    assert VoiceboxTTS(base_url="http://127.0.0.1:17493")._base_url == "http://127.0.0.1:17493"
+    monkeypatch.delenv("SHORTS_VOICEBOX_URL")
+    monkeypatch.delenv("SHORTS_VOICE_ENGINE")
+    monkeypatch.delenv("SHORTS_VOICE_MODEL_SIZE")
+    assert env_base_url() == DEFAULT_BASE_URL
+    assert env_engine() == "qwen"
+    assert env_model_size() is None
+
+
 @pytest.mark.slow
 def test_real_voicebox_one_sentence(tmp_path):
     tts = VoiceboxTTS()

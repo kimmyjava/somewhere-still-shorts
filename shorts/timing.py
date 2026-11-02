@@ -1,7 +1,9 @@
 """Word timing: Whisper's word times + the script text -> TimedWords with script spelling."""
 import json
 import logging
+import os
 import re
+import shutil
 import subprocess
 import sys
 import wave
@@ -19,6 +21,9 @@ TRANSCRIBE_SCRIPT = (
     Path(__file__).resolve().parents[1]
     / "vendor" / "kape-explainer" / "skills" / "kape-explainer" / "scripts" / "transcribe.py"
 )
+
+HYPERFRAMES_SPEC = "hyperframes@0.8.117"
+TRANSCRIBE_TIMEOUT_S = 1800
 
 log = logging.getLogger(__name__)
 
@@ -314,8 +319,49 @@ def fallback_timed_words(brief: "Brief", voice_dir: Path) -> list[TimedWord]:
 
 
 def transcribe(wav_path: Path, out_dir: Path, lang: str = "en", model: str = "medium") -> Path:
+    """vo-words.json for wav_path, via faster-whisper (Windows laptop) or whisper.cpp (server).
+
+    On Windows the path runs the vendor KAPE transcribe.py (faster-whisper) exactly as before.
+    Everywhere else - where faster-whisper cannot be installed (no musl wheels) - it runs
+    `hyperframes transcribe` (whisper.cpp, pinned hyperframes version) and converts its
+    word list into the same vo-words.json segments contract. HYPERFRAMES_BIN overrides the
+    hyperframes executable; SHORTS_WHISPER_MODEL overrides the whisper.cpp model (small.en
+    on purpose: it is the fastest model that still reads our narration reliably).
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, str(TRANSCRIBE_SCRIPT), str(wav_path), str(out_dir), "--lang", lang, "--model", model]
-    subprocess.run(cmd, check=True)
+    if sys.platform == "win32":
+        cmd = [sys.executable, str(TRANSCRIBE_SCRIPT), str(wav_path), str(out_dir),
+               "--lang", lang, "--model", model]
+        subprocess.run(cmd, check=True)
+        return out_dir / "vo-words.json"
+    return transcribe_hyperframes(wav_path, out_dir, lang=lang)
+
+
+def transcribe_hyperframes(wav_path: Path, out_dir: Path, lang: str = "en") -> Path:
+    """whisper.cpp word timings via the pinned hyperframes CLI, in vo-words.json shape."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    work = out_dir / ".hf-transcribe"
+    work.mkdir(exist_ok=True)
+    # transcript.json is written next to the input file: run on a copy inside the workdir.
+    local_wav = work / "vo.wav"
+    shutil.copyfile(wav_path, local_wav)
+    model = os.environ.get("SHORTS_WHISPER_MODEL", "small.en")
+    bin_override = os.environ.get("HYPERFRAMES_BIN", "").strip()
+    head = [bin_override] if bin_override else ["npx", "--yes", HYPERFRAMES_SPEC]
+    cmd = head + ["transcribe", "vo.wav", "--engine", "whisper",
+                  "--model", model, "--language", lang, "--json"]
+    env = dict(os.environ)
+    env.setdefault("HYPERFRAMES_BROWSER_PATH", "/usr/bin/chromium-browser")
+    subprocess.run(cmd, check=True, capture_output=True, env=env, cwd=work,
+                   timeout=TRANSCRIBE_TIMEOUT_S)
+    words = json.loads((work / "transcript.json").read_text(encoding="utf-8"))
+    segments = [{"s": round(float(w["start"]), 2), "e": round(float(w["end"]), 2),
+                 "text": str(w["text"]), "words": [{"w": str(w["text"]),
+                                                    "s": round(float(w["start"]), 2),
+                                                    "e": round(float(w["end"]), 2)}]}
+                for w in words]
+    (out_dir / "vo-words.json").write_text(json.dumps(segments, ensure_ascii=False),
+                                           encoding="utf-8")
     return out_dir / "vo-words.json"

@@ -87,6 +87,7 @@ def env_factory(tmp_path, monkeypatch):
                     "scenes": [["s01-hook", 7.3]],
                     "bgm": {"src": "b"},
                     "cues": [["s01-hook", 1.0, "pop"]],
+                    "sfx": {"pop": ["pop.mp3", 0.45], "impact": ["impact-bass-1.mp3", 0.1]},
                     "audio": [{"id": "vo", "src": "old", "dur": 1, "volume": 1, "track": 9}],
                     "overlays": [{"id": "m-kape", "track": 2, "z": 5}],
                 }), encoding="utf-8")
@@ -100,6 +101,9 @@ def env_factory(tmp_path, monkeypatch):
                 if "-filter_complex" in cmd:
                     Path(cmd[-1]).write_bytes(b"MP4")
                     return "mixed\n"
+                if any("anullsrc" in c for c in cmd):
+                    Path(cmd[-1]).write_bytes(b"fake-mp3")
+                    return "silent\n"
                 master = Path(cwd) / "assets" / "audio" / "vo-master.wav"
                 master.parent.mkdir(parents=True, exist_ok=True)
                 master.write_bytes(b"fake")
@@ -124,6 +128,7 @@ def env_factory(tmp_path, monkeypatch):
         monkeypatch.setattr(make_short, "_find_tool", lambda name: name)
         monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
         monkeypatch.delenv("CF_API_TOKEN", raising=False)
+        monkeypatch.setenv("SHORTS_VOICE_PROFILE_ID", "test-profile")
         music_dir = tmp_path / "music"
         music_dir.mkdir(exist_ok=True)
         for n in ("calm-01.mp3", "calm-02.mp3", "cozy-01.mp3"):
@@ -141,6 +146,26 @@ def env(env_factory):
 def run_main(env, *extra):
     return Path(make_short.main(["--brief", str(env["brief"]), "--jobs-root", str(env["jobs"]),
                                  "--music-dir", str(env["music"]), *extra]))
+
+
+def test_sfx_placeholders_created_for_missing_files(env, monkeypatch):
+    """The scaffold's film.json sfx map drives silent-mp3 placeholders; nothing overwrites real files."""
+    job = run_main(env, "--no-render")
+    sfx_dir = job / "film" / "assets" / "audio" / "sfx"
+    film_json = json.loads((job / "film" / "film.json").read_text(encoding="utf-8"))
+    for name in sorted({file_name for file_name, _v in film_json.get("sfx", {}).values()}):
+        path = sfx_dir / name
+        assert path.is_file(), f"missing placeholder for {name}"
+        assert path.stat().st_size > 0
+    # the fixture names impact-bass-1.mp3 for "impact": filename != sfx key must both be handled
+    assert (sfx_dir / "impact-bass-1.mp3").is_file()
+
+
+def test_voice_profile_id_env_override(monkeypatch):
+    monkeypatch.setenv("SHORTS_VOICE_PROFILE_ID", "server-preset-id")
+    assert make_short.voice_profile_id() == "server-preset-id"
+    monkeypatch.delenv("SHORTS_VOICE_PROFILE_ID")
+    assert make_short.voice_profile_id() == make_short.DEFAULT_PROFILE_ID
 
 
 def _read_scene_records(job):
@@ -208,12 +233,14 @@ def test_make_short_flow_writes_files_in_order(env):
     assert by_id["s03-back"]["style"] == "cozy"
 
     kinds = [c[0] for c in env["calls"]]
-    assert kinds == ["ffprobe", "node", "ffmpeg", sys.executable, sys.executable, sys.executable, "npx"]
+    assert kinds == ["ffprobe", "node", "ffmpeg", "ffmpeg", "ffmpeg", sys.executable,
+                     sys.executable, sys.executable, "npx"]
     assert "new-explainer.mjs" in env["calls"][1][1]
-    assert Path(env["calls"][3][1]).name == "build-presenter.py"
-    assert Path(env["calls"][4][1]).name == "build-brand.py"
-    assert Path(env["calls"][5][1]).name == "assemble.py"
-    assert "check" in env["calls"][6]
+    assert Path(env["calls"][5][1]).name == "build-presenter.py"
+    assert Path(env["calls"][6][1]).name == "build-brand.py"
+    assert Path(env["calls"][7][1]).name == "assemble.py"
+    assert "check" in env["calls"][8]
+    assert len(env["calls"]) == 9
     assert not any("render" in c for c in env["calls"][-1])
 
 
@@ -452,7 +479,7 @@ def test_unhealthy_voicebox_fails_before_anything_else(tmp_path, monkeypatch):
 
     monkeypatch.setattr(make_short, "VoiceboxTTS", SickTTS)
     monkeypatch.setattr(make_short, "transcribe", fail_transcribe)
-    with pytest.raises(StepError, match="Open the Voicebox app first"):
+    with pytest.raises(StepError, match="not healthy"):
         make_short.main(["--brief", str(BRIEF), "--jobs-root", str(tmp_path / "jobs"), "--redo-voice"])
 
 

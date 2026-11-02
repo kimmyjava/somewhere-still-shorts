@@ -13,25 +13,46 @@ generate_bg(prompt, out_path, account_id, token, client=None, style_ref=None) ->
                            input_image_0 is only sent when an explicit style_ref path is given.
 get_bg(bg_prompt, account_id, token, client=None, library=None, index=0, style="cozy") -> library
                        name for the prompt+ref+style triple, generating the picture once per triple.
-Library: C:/shorts/bg-library/<gen-hash>.jpg plus index.jsonl (file, prompt, model, style_ref,
-style, created). The hash covers the prompt, the ref name AND the style. Error messages carry
-Cloudflare's error text and never the token.
+Library: <SHORTS_DATA_ROOT>/bg-library/<gen-hash>.jpg plus index.jsonl (file, prompt, model,
+style_ref, style, created). SHORTS_DATA_ROOT defaults to C:/shorts on Windows (the laptop layout)
+and must be set elsewhere (for example /workspace/shorts-data on the TrueNAS server). The hash
+covers the prompt, the ref name AND the style. Error messages carry Cloudflare's error text and
+never the token.
 """
 import base64
 import hashlib
 import json
+import os
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import httpx
 
+
+def data_root() -> Path:
+    """Worker data root: everything that used to live under C:/shorts on the laptop.
+
+    SHORTS_DATA_ROOT overrides it (the server sets /workspace/shorts-data); unset, it falls
+    back to the laptop layout on Windows and ./shorts-data next to the repo elsewhere.
+    """
+    env = os.environ.get("SHORTS_DATA_ROOT", "").strip()
+    if env:
+        return Path(env)
+    if sys.platform == "win32":
+        return Path("C:/shorts")
+    return Path(__file__).resolve().parents[1].parent / "shorts-data"
+
+
 MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
 WIDTH = 768
 HEIGHT = 1344
-LIBRARY = Path("C:/shorts/bg-library")
 REPO = Path(__file__).resolve().parents[1]
 USE_STYLE_REF = False
+# Resolved once at import; SHORTS_DATA_ROOT must be set before the process starts
+# (subprocess workers inherit it). Tests monkeypatch this attribute directly.
+LIBRARY = data_root() / "bg-library"
 STYLE_REFS = {
     "books": REPO / "assets" / "bg" / "style-ref.jpg",
     "kitchen": REPO / "assets" / "bg" / "style-ref-kitchen.jpg",

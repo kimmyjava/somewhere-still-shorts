@@ -1,6 +1,7 @@
 """Fast timing tests on the real rain fixture (no Whisper run)."""
 import logging
 import sys
+from types import ModuleType
 import wave
 from pathlib import Path
 
@@ -242,6 +243,10 @@ def test_transcribe_runs_vendor_script_with_same_python(tmp_path, monkeypatch):
         (Path(cmd[3]) / "vo-words.json").write_text("[]", encoding="utf-8")
 
     monkeypatch.setattr("shorts.timing.subprocess.run", fake_run)
+    fake_sys = ModuleType("sys")
+    fake_sys.platform = "win32"
+    fake_sys.executable = sys.executable
+    monkeypatch.setattr("shorts.timing.sys", fake_sys)
     out = transcribe(tmp_path / "vo.wav", tmp_path / "timing", lang="en", model="medium")
 
     cmd = recorded["cmd"]
@@ -290,3 +295,47 @@ def test_fallback_timed_words_cover_each_part_in_order_and_end_at_total(tmp_path
     assert (three.end - three.start) > (one.end - one.start)
     # monotonic, never backwards
     assert all(a.end <= b.start + 1e-9 for a, b in zip(words, words[1:]))
+
+
+def test_transcribe_hyperframes_converts_to_vo_words(tmp_path, monkeypatch):
+    """whisper.cpp transcript -> same vo-words.json contract the align step reads."""
+    import json as _json
+
+    from shorts.timing import transcribe_hyperframes
+
+    work = tmp_path / "timing" / ".hf-transcribe"
+    work.mkdir(parents=True)
+    (work / "transcript.json").write_text(_json.dumps([
+        {"text": "Rain", "start": 0.1, "end": 0.4, "id": "w0"},
+        {"text": "falls", "start": 0.45, "end": 0.9, "id": "w1"},
+    ]), encoding="utf-8")
+    captured = {}
+
+    def fake_run(cmd, check, capture_output, env, cwd, timeout):
+        captured["cmd"] = cmd
+        captured["cwd"] = cwd
+
+    monkeypatch.setattr("shorts.timing.subprocess.run", fake_run)
+    monkeypatch.setattr("shorts.timing.shutil.copyfile", lambda a, b: None)
+    out = transcribe_hyperframes(tmp_path / "vo.wav", tmp_path / "timing", lang="en")
+
+    assert out == tmp_path / "timing" / "vo-words.json"
+    assert captured["cwd"] == work
+    assert "--engine" in captured["cmd"] and "whisper" in captured["cmd"]
+    segments = _json.loads(out.read_text(encoding="utf-8"))
+    assert segments == [
+        {"s": 0.1, "e": 0.4, "text": "Rain", "words": [{"w": "Rain", "s": 0.1, "e": 0.4}]},
+        {"s": 0.45, "e": 0.9, "text": "falls", "words": [{"w": "falls", "s": 0.45, "e": 0.9}]},
+    ]
+
+
+def test_data_root_env_and_default(monkeypatch):
+    from shorts.images import data_root
+
+    monkeypatch.setenv("SHORTS_DATA_ROOT", "/workspace/shorts-data")
+    assert data_root() == Path("/workspace/shorts-data")
+    monkeypatch.delenv("SHORTS_DATA_ROOT")
+    if sys.platform == "win32":
+        assert data_root() == Path("C:/shorts")
+    else:
+        assert data_root().name == "shorts-data"
