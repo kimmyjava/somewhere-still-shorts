@@ -170,3 +170,20 @@ def test_create_app_refuses_without_or_short_key(tmp_path, monkeypatch):
     monkeypatch.setenv("SHORTS_API_KEY", "too-short")
     with pytest.raises(RuntimeError, match="SHORTS_API_KEY"):
         create_app(jobs_root=tmp_path / "jobs")
+
+
+def test_gateway_cli_host_defaults_loopback(monkeypatch, tmp_path):
+    """--host defaults to 127.0.0.1; --host 0.0.0.0 reaches uvicorn (published-port mode)."""
+    import tools.gateway as cli
+
+    seen = {}
+    monkeypatch.setenv("SHORTS_API_KEY", KEY)
+    monkeypatch.setattr(cli, "create_app", lambda jobs_root=None: jobs_root)
+    monkeypatch.setattr(cli.uvicorn, "run",
+                        lambda app, host, port: seen.update(host=host, port=port, jobs=app))
+
+    cli.main([])
+    assert seen["host"] == "127.0.0.1" and seen["port"] == 8787 and seen["jobs"] is None
+    jobs = tmp_path / "jobs"
+    cli.main(["--host", "0.0.0.0", "--port", "9001", "--jobs-root", str(jobs)])
+    assert seen["host"] == "0.0.0.0" and seen["port"] == 9001 and seen["jobs"] == jobs

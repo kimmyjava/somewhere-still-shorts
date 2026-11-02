@@ -70,12 +70,17 @@
   track to -30 LUFS, sidechain-ducks it under the voice, final mix -14 LUFS.
 
 ## Gateway
-- Local job gateway: FastAPI, bound to 127.0.0.1:8787 ONLY (tools/gateway.py); n8n reaches it
-  through a Tailscale Funnel (https), never an open port. Cloudflare is only used for background
-  images (Workers AI).
-- Auth: X-API-Key header compared against the SHORTS_API_KEY env var (>= 32 chars, never logged
-  or returned). One worker thread, one job at a time; status in <job>/status.json.
-- Voicebox stays on 127.0.0.1:17493 and is never exposed; /health only reports its up/down.
+- Local job gateway: FastAPI (tools/gateway.py); auth: X-API-Key header compared against the
+  SHORTS_API_KEY env var (>= 32 chars, never logged or returned). One worker thread, one job at
+  a time; status in <job>/status.json.
+- Laptop: bound to 127.0.0.1:8787 ONLY; n8n reaches it through a Tailscale Funnel (https), never
+  an open port. Voicebox stays on 127.0.0.1:17493 and is never exposed; /health only reports its
+  up/down.
+- TrueNAS server (2026-11): `python -m tools.gateway --host 0.0.0.0 --port 8787` behind a
+  published Docker port (8787:8787) - LAN-only, still key-gated. n8n (same host, 192.168.8.184)
+  posts briefs to http://192.168.8.184:8787/jobs. SHORTS_API_KEY lives in
+  /config/opencode/shorts-gateway.env (chmod 600, outside the repo); source it plus
+  /workspace/shorts-data/env.sh before starting. Gateway health: /health (no key needed).
 
 ## Not decided yet
 - Final colours and fonts. Scene template list for the cozy style.
