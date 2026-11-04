@@ -22,12 +22,45 @@
 
 ### Server voice (2026-11)
 - TrueNAS Voicebox Docker v0.6.0, reached via SHORTS_VOICEBOX_URL (host-local, never exposed).
-- Profile: kokoro preset "Heart", id 65c29b06-04b5-4df7-8af9-2e44c2239630, engine "kokoro",
-  model_size must be null (kokoro has no size axis). Env-driven: SHORTS_VOICEBOX_URL,
-  SHORTS_VOICE_PROFILE_ID, SHORTS_VOICE_ENGINE, SHORTS_VOICE_MODEL_SIZE (server values in
-  /workspace/shorts-data/env.sh); unset falls back to the laptop's Kim/qwen values above.
-- The cloned "Kim" profile exists only on the laptop; importing it to the server is a later
-  env-only change (kokoro may not accept cloned profiles - test before switching).
+- Profile (2026-11-02): cloned "Kim Natural Voice", id 8da2dcf2-f222-403f-a2fb-bee1c17804ba,
+  engine "qwen" - the same voice as the laptop. Verified end to end on the server: a probe
+  line synthesized in 3.4 s (model_size 0.6B). Kokoro preset "Heart" (65c29b06-04b5-4df7-
+  8af9-2e44c2239630) is retired but still exists on the server. Env-driven:
+  SHORTS_VOICEBOX_URL, SHORTS_VOICE_PROFILE_ID, SHORTS_VOICE_ENGINE, SHORTS_VOICE_MODEL_SIZE
+  (server values in /workspace/shorts-data/env.sh); unset falls back to the laptop values.
+- Profile warning (2026-11-04): cloned "Kim - Natural Voice (First Sample)", id 20bae498-5b0c-
+  4b00-a37c-0b40fe2fe5fc, CRASHES the Voicebox worker mid-generation on the server (silent
+  connection drop / container self-exit with code 0; also wedges generations 'generating'
+  forever). Reproduced on Voicebox v0.6.0 AND after a v0.5.0 downgrade, with and without
+  OMP/MKL_NUM_THREADS=1 - it is the profile's reference samples, not the version or host.
+  Old profile 8da2dcf2 completes deterministically in the same minutes. Do NOT point
+  SHORTS_VOICE_PROFILE_ID at 20bae498 until its 3 samples are inspected/re-recorded in the
+  Voicebox UI (details: Vikunja SERVER-3).
+- Voicebox server env since 2026-11-04: OMP_NUM_THREADS=1 + MKL_NUM_THREADS=1 (Nicola).
+  With them, a bad generation no longer spins all 6 cores (load was 6+ during failures,
+  ~1.3 single-threaded). Cost: TTS ~87 s per line instead of ~7 s; acceptable.
+- Model size: server runs 0.6B (verified repeatedly, 1.2-4.4 s synthesis). qwen-custom-voice-1.7B
+  cannot be downloaded by the Voicebox container itself: after a clean container restart it still
+  dies ~10% into the 682 MB speech_tokenizer/model.safetensors, every attempt, while other model
+  downloads (1.4-2.4 GB) complete from the same container and the same file fetches fine (65 MB/s)
+  from the opencode container. The 3.8 GB main file landed on the first attempt; only the tokenizer
+  is missing, which is why 1.7B generation failed with the huggingface.co connection error (cloned
+  profiles need the CustomVoice variant, not the cached qwen-tts-1.7B).
+- 1.7B workaround progress (2026-11-02): the CustomVoice TTS side is solved - full repo fetched
+  into /workspace/shorts-data/voicebox-models/models--Qwen--Qwen3-TTS-12Hz-1.7B-CustomVoice
+  (HF cache layout, pinned sha 0c0e3051f131929182e2c023b9537f8b1c68adfe), bind-mounted per-model
+  into the container hub cache; /models/load loads it fine (loaded:true). A verified staged copy
+  of the backbone (models--Qwen--Qwen3-1.7B, sha 70d244cc, weights match index 4063479808 bytes)
+  is also staged and mounted. Remaining blocker: loading the Qwen3-1.7B BACKBONE crashes the
+  container worker silently (curl gets an empty reply; connection closes ~21-28 s in; no HTTP
+  status, no log access) - on /models/load AND /llm/generate, with watchdog disabled, memory
+  free (host 32 GB/12 GB avail, no container limit), staged cache mounted, sha matching. The
+  3.8 GB CustomVoice model loads through the same endpoint fine, and 0.6B (1.4+2.4 GB models)
+  generates fine. Current best theory: musl/Alpine + OpenMP crash during multithreaded tensor
+  load of the 4 GB backbone (known crash class; laptop glibc v0.5.0 loads the same model fine).
+  Next lever if ever revisited: OMP_NUM_THREADS=1 + MKL_NUM_THREADS=1 env on the container,
+  or a glibc-based Voicebox image. Do NOT POST /models/download for qwen-custom-voice-1.7B -
+  it would overwrite the staged cache. Laptop keeps 1.7B.
 
 ## Word timings (tested 2026-10-16)
 - Laptop: vendor KAPE scripts/transcribe.py, faster-whisper "medium", --lang en.
