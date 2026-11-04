@@ -8,6 +8,8 @@ renders/
 snapshots/
 *.wav
 *.mp3
+!assets/music/*.mp3
+assets/music/.christmas-04.mp3
 *.mp4
 !tests/fixtures/*.wav
 .venv/
