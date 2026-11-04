@@ -73,16 +73,17 @@ def cozy_scene_html(sid, dur, headline, bg, zoom_start=1.0):
 def cozy_captions_html(chunks, total, top=1250, left=470, right=70):
     """chunks: list of CaptionChunk (TimedWord .text/.start/.end). Shows each chunk from its start to the next chunk; spoken word in accent.
     Windows never overlap: chunks are ordered by start, every chunk hides before the next one shows
-    (each stays on screen at least 0.15 s; the next chunk's start is shifted if needed), and the last
-    chunk hides at min(last word end + 0.5, total)."""
+    (each stays on screen at least 0.2 s - longer than the 0.18 s entrance tween, so the hide can
+    never land inside it and stick the caption visible; the next chunk's start is shifted if needed),
+    and the last chunk hides at min(last word end + 0.5, total)."""
     ordered = sorted(chunks, key=lambda c: c.start)
     starts = [c.start for c in ordered]
     html, js = [], []
     for ci, ch in enumerate(ordered):
         if ci + 1 < len(ordered):
             hide = starts[ci + 1]
-            if hide < starts[ci] + 0.15:
-                hide = starts[ci] + 0.15
+            if hide < starts[ci] + 0.2:
+                hide = starts[ci] + 0.2
                 starts[ci + 1] = hide
         else:
             hide = min(ch.words[-1].end + 0.5, total)

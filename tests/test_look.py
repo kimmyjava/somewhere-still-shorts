@@ -77,10 +77,21 @@ def test_captions_html_same_start_chunks_never_overlap():
     words = [TimedWord("One.", 0.0, 0.3), TimedWord("Two.", 0.05, 0.3), TimedWord("Three.", 0.1, 0.3)]
     html = cozy_captions_html(make_chunks(words, max_words=1), 3.0)
     shows, hides = _visible_windows(html)
-    assert shows == {0: 0.0, 1: 0.15, 2: 0.3}
-    assert hides == {0: 0.15, 1: 0.3, 2: 0.8}
+    assert shows == {0: 0.0, 1: 0.2, 2: 0.4}
+    assert hides == {0: 0.2, 1: 0.4, 2: 0.8}
     for i in range(2):
         assert shows[i] < hides[i] <= shows[i + 1]
+
+
+def test_captions_html_short_chunk_hides_after_entrance_tween():
+    """Regression: a chunk shorter than the 0.18s entrance tween used to get its hide
+    placed inside the tween; GSAP let the tween win and the caption stuck visible
+    forever (content_overlap QA failure on 'past.', 0.14s)."""
+    words = [TimedWord("weird.", 10.0, 10.14), TimedWord("Far", 10.14, 10.4), TimedWord("beyond", 10.5, 10.9)]
+    html = cozy_captions_html(make_chunks(words, max_words=3), 12.0)
+    shows, hides = _visible_windows(html)
+    for i, show in shows.items():
+        assert hides[i] >= show + 0.2, f"chunk {i}: hide {hides[i]} inside entrance window (show {show})"
 
 
 def test_captions_html_reversed_chunks_never_overlap():
