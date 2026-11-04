@@ -9,7 +9,7 @@
       "git log*": "allow",
       "C:\\shorts\\venv\\Scripts\\python -m pytest*": "allow",
       "C:/shorts/venv/Scripts/python -m pytest*": "allow",
-      "git push*": "deny",
+      "git push*": "allow",
       "rm *": "deny",
       "del *": "deny",
       "Remove-Item*": "deny"
