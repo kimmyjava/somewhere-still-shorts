@@ -163,6 +163,38 @@ def test_startup_marks_running_jobs_failed(tmp_path, monkeypatch):
     assert "restarted" in r.json()["error"]
 
 
+def test_startup_reenqueues_queued_jobs(tmp_path, monkeypatch):
+    """A job stub left 'queued' by a gateway restart is picked up and run on startup."""
+    jobs = tmp_path / "jobs"
+    for name in ("aaa-20260101-000001", "bbb-20260101-000002", "done-20260101-000003"):
+        (jobs / name).mkdir(parents=True)
+        (jobs / name / "brief.json").write_text("{}", encoding="utf-8")
+    (jobs / "aaa-20260101-000001" / "status.json").write_text(
+        json.dumps({"status": "queued"}), encoding="utf-8")
+    (jobs / "bbb-20260101-000002" / "status.json").write_text(
+        json.dumps({"status": "queued"}), encoding="utf-8")
+    (jobs / "done-20260101-000003" / "status.json").write_text(
+        json.dumps({"status": "done"}), encoding="utf-8")
+
+    calls = []
+
+    def fake_run(cmd, cwd=None, log_path=None, timeout_s=600):
+        calls.append(Path(cmd[cmd.index("--brief") + 1]).parent.name)
+        Path(log_path).write_text("x\n", encoding="utf-8")
+        return "fake log\n"
+
+    monkeypatch.setattr(gw, "run", fake_run)
+    monkeypatch.setattr(gw, "voicebox_up", lambda: True)
+    client = TestClient(create_app(jobs_root=jobs))
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and len(calls) < 2:
+        time.sleep(0.05)
+    assert calls == ["aaa-20260101-000001", "bbb-20260101-000002"]
+    # 'done' job is left untouched
+    assert client.get("/jobs/done-20260101-000003", headers=H).json()["status"] == "done"
+
+
 def test_create_app_refuses_without_or_short_key(tmp_path, monkeypatch):
     monkeypatch.delenv("SHORTS_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="SHORTS_API_KEY"):

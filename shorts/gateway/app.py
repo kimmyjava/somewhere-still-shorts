@@ -67,6 +67,7 @@ def create_app(jobs_root=None) -> FastAPI:
     jobs_root = Path(jobs_root) if jobs_root is not None else data_root() / "jobs"
     jobs_root.mkdir(parents=True, exist_ok=True)
 
+    pending: list[str] = []
     for status_path in jobs_root.glob("*/status.json"):
         try:
             old = json.loads(status_path.read_text(encoding="utf-8"))
@@ -75,9 +76,17 @@ def create_app(jobs_root=None) -> FastAPI:
         if old.get("status") == "running":
             _write_status(status_path.parent, status="failed", finished=_now(),
                           error="gateway restarted while the job was running")
+        elif old.get("status") == "queued":
+            # orphaned before the worker picked it up (gateway died while queued):
+            # re-enqueue, oldest first (job ids embed YYYYMMDD-HHMMSS)
+            pending.append(status_path.parent.name)
+
+    pending.sort()
 
     app = FastAPI(title="shorts-worker gateway", docs_url=None, redoc_url=None)
     jobs: "queue.Queue[str]" = queue.Queue()
+    for job_id in pending:
+        jobs.put(job_id)
 
     def require_key(x_api_key: str = Header(default="")) -> None:
         if not hmac.compare_digest(x_api_key, key):
