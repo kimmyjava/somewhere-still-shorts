@@ -1,0 +1,200 @@
+{
+  "hero-lying.png": {
+    "x": 141,
+    "y": 246,
+    "w": 294,
+    "h": 110
+  },
+  "hero-lying-shock.png": {
+    "x": 141,
+    "y": 246,
+    "w": 309,
+    "h": 109
+  },
+  "hero-sit-phone.png": {
+    "x": 258,
+    "y": 416,
+    "w": 228,
+    "h": 323
+  },
+  "hero-sit-calm.png": {
+    "x": 258,
+    "y": 415,
+    "w": 229,
+    "h": 324
+  },
+  "guard-panic.png": {
+    "x": 283,
+    "y": 253,
+    "w": 139,
+    "h": 356
+  },
+  "hero-present-nervous.png": {
+    "x": 263,
+    "y": 375,
+    "w": 173,
+    "h": 372
+  },
+  "hero-panic-arms-up.png": {
+    "x": 306,
+    "y": 375,
+    "w": 124,
+    "h": 372
+  },
+  "hero-overthink.png": {
+    "x": 254,
+    "y": 415,
+    "w": 161,
+    "h": 372
+  },
+  "hero-chest.png": {
+    "x": 305,
+    "y": 416,
+    "w": 145,
+    "h": 371
+  },
+  "hero-avoid.png": {
+    "x": 283,
+    "y": 415,
+    "w": 161,
+    "h": 372
+  },
+  "hero-explain.png": {
+    "x": 253,
+    "y": 395,
+    "w": 162,
+    "h": 372
+  },
+  "hero-breathe.png": {
+    "x": 257,
+    "y": 395,
+    "w": 158,
+    "h": 372
+  },
+  "hero-ground.png": {
+    "x": 257,
+    "y": 395,
+    "w": 203,
+    "h": 372
+  },
+  "hero-resolve.png": {
+    "x": 258,
+    "y": 395,
+    "w": 197,
+    "h": 372
+  },
+  "hero-point.png": {
+    "x": 251,
+    "y": 405,
+    "w": 163,
+    "h": 372
+  },
+  "phone-notification.png": {
+    "x": 142,
+    "y": 52,
+    "w": 436,
+    "h": 382
+  },
+  "bubble-empty.png": {
+    "x": 122,
+    "y": 262,
+    "w": 477,
+    "h": 236
+  },
+  "bubble-small.png": {
+    "x": 232,
+    "y": 222,
+    "w": 257,
+    "h": 156
+  },
+  "alarm-panel.png": {
+    "x": 131,
+    "y": 551,
+    "w": 458,
+    "h": 168
+  },
+  "alarm-light-off.png": {
+    "x": 517,
+    "y": 182,
+    "w": 86,
+    "h": 126
+  },
+  "alarm-light-on.png": {
+    "x": 465,
+    "y": 132,
+    "w": 189,
+    "h": 177
+  },
+  "monster-question.png": {
+    "x": 154,
+    "y": 280,
+    "w": 410,
+    "h": 421
+  },
+  "audience-laughing.png": {
+    "x": 77,
+    "y": 510,
+    "w": 570,
+    "h": 224
+  },
+  "bed-blanket.png": {
+    "x": 51,
+    "y": 397,
+    "w": 618,
+    "h": 222
+  },
+  "laptop.png": {
+    "x": 152,
+    "y": 471,
+    "w": 416,
+    "h": 263
+  },
+  "tiny-problem.png": {
+    "x": 291,
+    "y": 452,
+    "w": 138,
+    "h": 96
+  },
+  "icon-eye.png": {
+    "x": 261,
+    "y": 415,
+    "w": 198,
+    "h": 130
+  },
+  "icon-hand.png": {
+    "x": 266,
+    "y": 420,
+    "w": 177,
+    "h": 175
+  },
+  "icon-ear.png": {
+    "x": 330,
+    "y": 379,
+    "w": 81,
+    "h": 140
+  },
+  "icon-lungs.png": {
+    "x": 269,
+    "y": 411,
+    "w": 182,
+    "h": 158
+  },
+  "breath-ring.png": {
+    "x": 201,
+    "y": 322,
+    "w": 318,
+    "h": 316
+  },
+  "podium.png": {
+    "x": 231,
+    "y": 551,
+    "w": 258,
+    "h": 178
+  },
+  "phone-down.png": {
+    "x": 161,
+    "y": 511,
+    "w": 398,
+    "h": 158
+  }
+}
