@@ -13,3 +13,4 @@ assets/music/.christmas-04.mp3
 *.mp4
 !tests/fixtures/*.wav
 .venv/
+.opencode/skills/

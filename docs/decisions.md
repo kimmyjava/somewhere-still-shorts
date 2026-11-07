@@ -145,5 +145,21 @@
 - Gateway restart after any opencode container restart/recreate:
   docker exec opencode sh /workspace/shorts-data/start-gateway.sh
 
+## Skills (2026-11-07)
+- directing-stickman-videos (MIT, github.com/kaomei/stickman-video-director, pin
+  eb4bb37) installed project-scoped at .opencode/skills/, gitignored (third-party
+  tool, kept out of the repo like vendor/ semantics but outside vendor/ itself).
+  Bundles a Node 20+ render runtime (@napi-rs/canvas + ffmpeg) that renders a
+  declarative project.json (shots/layers/keyframes/captions/SFX) into narrated
+  stickman MP4s; styles B1 minimal line art, B2 colorful hand-drawn, B3 retro TV,
+  B4 survival thriller. Verified on server: doctor, validate, 16.4s example
+  preview render from the installed path (full decode pass). Upstream reference
+  clone: /workspace/stickman-video-director (has git history for future updates).
+  Default TTS is Gemini (no key here); any local voice track works, so Voicebox
+  audio can drive it if we ever bridge it. Not wired into the pipeline; interactive
+  use only for now. VID-4.
+
 ## Not decided yet
 - Final colours and fonts. Scene template list for the cozy style.
+- Whether a stickman style variant makes sense for Somewhere Still or stays an
+  experiment for other channels (needs Kimmy's call before any bridge work).
