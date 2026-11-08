@@ -54,3 +54,41 @@
   inspection at 270px thumbnails and full-res stills).
 - No YouTube metadata (title/description/tags) authored — out of scope of
   the brief.
+
+## Viewing the MP4 in the opencode web UI (investigated 2026-11-08)
+The finished film is at `films/anxiety-your-brain-is-not-your-enemy.mp4`
+(2.4 MB, h264/aac yuv420p, moov up front, fully web-streamable). The web UI
+file viewer showed "Couldn't load this file." + "Binary file · size" for it.
+
+Code-mining the UI bundles (opencode 3.0.x web client) decoded the full
+viewer path:
+
+1. `browser-*.js` viewer chunk: content `type === 'binary' && !mimeType`,
+   or a media-element `error` event, flips the panel to the "Binary file"
+   fallback and renders "Couldn't load this file." (`view.loadFailed`).
+2. `palette-*.js` loader `ce()`: for image/audio/video extensions it first
+   builds a **streaming URL** via `oe()` (health chunk `ge()`) and does a
+   `HEAD`; on HEAD failure it falls back to inline `api.file.read`.
+3. `health-*.js` `ge()`: **deliberately returns `undefined` whenever the
+   server has a password configured** — a bare `<video src>` cannot carry an
+   `Authorization` header, so password-protected servers never get the
+   streaming path.
+4. The inline fallback caps at 268 MB (file is 2.4 MB, fine) and keeps
+   `mimeType: video/mp4`, so the blob-URL player should render it.
+
+Ground truth on the server side (curl with basic auth against
+`127.0.0.1:4096`): `/api/fs/read/films/anxiety-….mp4?location[directory]=/workspace/video-generation`
+returns `200`, `video/mp4`, `accept-ranges: bytes`, working 206 Range
+responses, and byte-identical MP4 data. The same file plays metadata in
+headless Chromium when loaded as a Blob. Nothing is wrong with the file or
+the API.
+
+Conclusion: the viewer's failure was observed around the container restart
+window and matches the transient-load error state (a failed fetch leaves the
+sticky "Couldn't load this file." + "Binary file" UI). The file itself is
+valid and serves correctly. If the error reappears in the user's browser, the
+likely structural culprit is the password-gated `ge()` streaming path (item 3
+above) — candidate upstream bug report with the bundle evidence. Workarounds:
+re-open the file after any server restart, or download the file from the
+viewer menu; direct URL playback (any local player on
+`http://192.168.8.184:4096/api/fs/read/…`) also works with the UI login.
