@@ -125,8 +125,8 @@
   an open port. Voicebox stays on 127.0.0.1:17493 and is never exposed; /health only reports its
   up/down.
 - TrueNAS server (2026-11): `python -m tools.gateway --host 0.0.0.0 --port 8787` behind a
-  published Docker port (8787:8787) - LAN-only, still key-gated. n8n (same host, 192.168.8.184)
-  posts briefs to http://192.168.8.184:8787/jobs. SHORTS_API_KEY lives in
+  published Docker port (8787:8787) - LAN-only, still key-gated. n8n (same host, <server-host>)
+  posts briefs to http://<server-host>:8787/jobs. SHORTS_API_KEY lives in
   /config/opencode/shorts-gateway.env (chmod 600, outside the repo); source it plus
   /workspace/shorts-data/env.sh before starting. Gateway health: /health (no key needed).
 
@@ -139,8 +139,8 @@
   source: "fallback", fixed backgrounds used) and no music library yet (video ships
   without music). Both degrade gracefully by design.
 - n8n (self-hosted, same host) is rewired to the server gateway: all five HTTP nodes use
-  http://192.168.8.184:8787, credential "Shorts gateway key" (X-API-Key) on the four job
-  routes; n8n's SSRF allowlist needs 192.168.8.184/32 (N8N_SSRF_ALLOWED_IP_RANGES).
+  http://<server-host>:8787, credential "Shorts gateway key" (X-API-Key) on the four job
+  routes; n8n's SSRF allowlist needs <server-host>/32 (N8N_SSRF_ALLOWED_IP_RANGES).
   Pre-rewire backup: /workspace/shorts-data/tmp/workflow-backup-6OJOrTk7H5gvZpJp.json.
 - Gateway restart after any opencode container restart/recreate:
   docker exec opencode sh /workspace/shorts-data/start-gateway.sh

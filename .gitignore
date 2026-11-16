@@ -14,3 +14,4 @@ assets/music/.christmas-04.mp3
 !tests/fixtures/*.wav
 .venv/
 .opencode/skills/
+.opencode/anxiety/

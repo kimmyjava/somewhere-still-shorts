@@ -74,8 +74,8 @@ Server: plain Linux shell (BusyBox tools); paths as written above.
   in /config/.cache/hyperframes. /tmp is wiped on container recreate - anything
   installed there must be re-created or replaced by env paths in env.sh.
 - n8n workflow "Somewhere Still - Make a Short (core)" posts briefs to
-  http://192.168.8.184:8787/jobs with the "Shorts gateway key" credential.
-  n8n's SSRF allowlist must include 192.168.8.184/32 (N8N_SSRF_ALLOWED_IP_RANGES).
+  http://<server-host>:8787/jobs with the "Shorts gateway key" credential.
+  n8n's SSRF allowlist must include <server-host>/32 (N8N_SSRF_ALLOWED_IP_RANGES).
 - n8n executions debugging (verified 2026-11-02):
   - Test/MCP-triggered webhook runs ARE saved and listed by the API (mode "webhook"/
     "manual"). If executions seem missing, the usual cause is that the probe workflow
